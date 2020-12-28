@@ -98,13 +98,13 @@
                     $('#market_commodity_buyreqeusts_table').html( data.buy_order_table ).find('tr:last').remove();
                     var $tbody_forsale = $('#market_commodity_forsale_table>table>tbody');
                     var $tbody_forbuy = $('#market_commodity_buyreqeusts_table>table>tbody');
-                    for(var i=5;i<10;i++) {
+                    for(var i=5;i<15;i++) {
                         $tbody_forsale.append('<tr><td align=right>' +data.price_prefix+' '+swhX64.formatNum(data.sell_order_graph[i][0])+' ' +data.price_suffix+'</td><td align=right>'+data.sell_order_graph[i][1]+'</td></tr>');
                         $tbody_forbuy.append('<tr><td align=right>'+data.price_prefix+' '+swhX64.formatNum(data.buy_order_graph[i][0])+' ' +data.price_suffix+'</td><td align=right>'+data.buy_order_graph[i][1]+'</td></tr>');
                     }
                     var td_body = "<td>"
                     +" <a class=\"btn_darkblue_white_innerfade btn_small\" href=\"javascript:void(0)\" onclick=\""
-                    +"$J('#"+swhX64.multiAction+"_"+item_nameid+"_price"+(swhX64.multiAction=='sell'?'_paid':'')+"').css('color','white').val($J(this).parent().parent().find('td:first').text());$J('.newmodal_background').click();\""
+                    +"$J('#"+swhX64.multiAction+"_"+item_nameid+"_price"+(swhX64.multiAction=='sell'?'_paid':'')+"').css('color','white').val($J(this).parent().parent().find('td:first').text()).keyup();$J('.newmodal_background').click();\""
                     +"><span>use</span></a>"
                     +"</td>";
                     $tbody_forsale.find('tr:not(:first-child)').each(function(i,row) {
