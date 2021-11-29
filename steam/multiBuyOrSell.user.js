@@ -2,9 +2,9 @@
 // @name         Steam Market Helper
 // @description  -
 // @namespace    https://github.com/HenkerX64
-// @updateURL    https://raw.githubusercontent.com/HenkerX64/steam-web-helpers/main/userscript/multiBuyOrSell.user.js
+// @updateURL    https://raw.githubusercontent.com/HenkerX64/tampermonkey-web-helpers/main/steam/multiBuyOrSell.user.js
 // @version      0.1
-// @description  try to take over the world!
+// @description  -
 // @author       Henkerx64
 // @match        *://steamcommunity.com/market/multisell*
 // @match        *://steamcommunity.com/market/multibuy*
