@@ -105,10 +105,10 @@
                     var targetId = '#'+swhX64.multiAction+"_"+item_nameid+"_price"+(swhX64.multiAction=='sell'?'_paid':'');
                     var td_body = "<td>"
                     +" <a class=\"btn_darkblue_white_innerfade btn_small\" href=\"javascript:void(0)\" onclick=\""
-                    +"$J('"+targetId+"').css('color','white').val($J(this).parent().parent().find('td:first').text());$J('"+targetId+"').trigger('blur');$J('.newmodal_background').click();\""
+                    +"$J('"+targetId+"').css('color','white').val($J(this).parent().parent().find('td:first').text());$J('.newmodal_background').click();$J('"+targetId+"').trigger('keup').trigger('blur');\""
                     +"><span>use</span></a>"
                     +" <a class=\"btn_darkblue_white_innerfade btn_small\" href=\"javascript:void(0)\" onclick=\""
-                    +"$J('"+targetId+"').css('color','white').val(parseFloat($J(this).parent().parent().find('td:first').text().replace(/[^0-9,]+/g,'').replace(',','.')) - 0.01);$J('"+targetId+"').trigger('blur');$J('.newmodal_background').click();\""
+                    +"$J('"+targetId+"').css('color','white').val(parseFloat($J(this).parent().parent().find('td:first').text().replace(/[^0-9,]+/g,'').replace(',','.')) - 0.01);$J('.newmodal_background').click();$J('"+targetId+"').trigger('keup').trigger('blur');\""
                     +"><span>-</span></a>"
                     +"</td>";
                     $tbody_forsale.find('tr:not(:first-child)').each(function(i,row) {
