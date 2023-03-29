@@ -2,6 +2,7 @@
 // @name         Удаление блокировки с сервиса gidonline.io
 // @namespace    https://github.com/HenkerX64
 // @updateURL    https://raw.githubusercontent.com/HenkerX64/tampermonkey-web-helpers/main/gidonline/removeBlock1001.user.js
+// @downloadURL  https://raw.githubusercontent.com/HenkerX64/tampermonkey-web-helpers/main/gidonline/removeBlock1001.user.js
 // @version      0.2
 // @description  -
 // @author       Henkerx64
