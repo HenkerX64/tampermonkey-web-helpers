@@ -1,11 +1,13 @@
 // ==UserScript==
-// @name        steam物品价值
-// @namespace   https://github.com/lzghzr/TampermonkeyJS
+// @name        steam item gems value
+// @namespace   https://github.com/HenkerX64
+// @updateURL   https://raw.githubusercontent.com/HenkerX64/tampermonkey-web-helpers/main/steam/steamItemGoo.user.js
 // @version     0.0.2
 // @author      lzghzr
-// @description 在市场物品详情中显示价值
-// @supportURL  https://github.com/lzghzr/TampermonkeyJS/issues
+// @description Show gems value in marketplace item details
+// @supportURL  https://raw.githubusercontent.com/HenkerX64/tampermonkey-web-helpers/issues
 // @match       *://steamcommunity.com/market/listings/753/*
+// @connect     steamcommunity.com
 // @license     MIT
 // @grant       none
 // @run-at      document-end
@@ -23,5 +25,5 @@ function addGoo(gooValue) {
   const elmDivItem = document.querySelector('#largeiteminfo_item_descriptors');
   if (elmDivItem !== null)
     elmDivItem.innerHTML += `<div class="descriptor">&nbsp;</div>
-<div class="descriptor">该物品价值：<span style="color: #5b9ace">${gooValue} 个宝石</span></div>`;
+<div class="descriptor">Gems：<span style="color: #5b9ace">${gooValue}</span></div>`;
 }
