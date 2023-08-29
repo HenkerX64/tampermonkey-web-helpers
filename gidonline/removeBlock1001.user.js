@@ -3,7 +3,7 @@
 // @namespace    https://github.com/HenkerX64
 // @updateURL    https://raw.githubusercontent.com/HenkerX64/tampermonkey-web-helpers/main/gidonline/removeBlock1001.user.js
 // @downloadURL  https://raw.githubusercontent.com/HenkerX64/tampermonkey-web-helpers/main/gidonline/removeBlock1001.user.js
-// @version      0.3
+// @version      0.4
 // @description  -
 // @author       Henkerx64
 // @match        *://gidonline.io/*
@@ -24,6 +24,7 @@
                 elem.style.display = display;
             }
         }
+        changeElementVisibility('cdn-player', 'block');
         // @see https://gidonline.io/wp-content/themes/gidonline/js/tray.js
         changeElementVisibility('tray', 'block');
         // @see https://gidonline.io/wp-content/themes/gidonline/js/cloudi.js
@@ -32,7 +33,7 @@
         changeElementVisibility('seriesps-2', 'block');
         changeElementVisibility('friend', 'block');
         changeElementVisibility('trayn', 'none');
-        changeElementVisibility('playh2', 'none');
+        changeElementVisibility('tray-load', 'none');
 
         const src = id.src;
         if (!src) {
@@ -44,6 +45,6 @@
         }
         id.src = src.replace(pattern, '');
 
-    }, 500);
+    }, document.getElementById('cdn-player') ? 100 : 500);
 
 })();
