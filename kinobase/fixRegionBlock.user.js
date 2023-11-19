@@ -3,7 +3,7 @@
 // @namespace    https://github.com/HenkerX64
 // @updateURL    https://raw.githubusercontent.com/HenkerX64/tampermonkey-web-helpers/main/kinobase/fixRegionBlock.user.js
 // @downloadURL  https://raw.githubusercontent.com/HenkerX64/tampermonkey-web-helpers/main/kinobase/fixRegionBlock.user.js
-// @version      0.1
+// @version      0.2
 // @description  -
 // @author       Henkerx64
 // @match        https://kinobase.org/*
@@ -35,7 +35,7 @@
         }
 
         for(let cookieName of cookieNamesToChange) {
-            setCookie(cookieName, 'KZ', 30);
+            setCookie(cookieName, 'KZ', 2); // country_md5(ip)=ISO2
         }
     }, 500);
 
