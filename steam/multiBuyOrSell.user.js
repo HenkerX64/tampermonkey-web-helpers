@@ -98,10 +98,10 @@
                     $('#market_commodity_buyreqeusts_table').html( data.buy_order_table ).find('tr:last').remove();
                     var $tbody_forsale = $('#market_commodity_forsale_table>table>tbody');
                     var $tbody_forbuy = $('#market_commodity_buyreqeusts_table>table>tbody');
-                    for(const sell_graph of data.sell_order_graph.slice(5)) {
+                    for(const sell_graph of data.sell_order_graph.slice(5,20)) {
                         $tbody_forsale.append('<tr><td align=right>' +data.price_prefix+' '+swhX64.formatNum(sell_graph[0])+' ' +data.price_suffix+'</td><td align=right>'+sell_graph[1]+'</td></tr>');
                     }
-                    for(const buy_graph of data.buy_order_graph.slice(5)) {
+                    for(const buy_graph of data.buy_order_graph.slice(5,20)) {
                         $tbody_forbuy.append('<tr><td align=right>'+data.price_prefix+' '+swhX64.formatNum(buy_graph[0])+' ' +data.price_suffix+'</td><td align=right>'+buy_graph[1]+'</td></tr>');
                     }
                     var targetId = '#'+swhX64.multiAction+"_"+item_nameid+"_price"+(swhX64.multiAction=='sell'?'_paid':'');
