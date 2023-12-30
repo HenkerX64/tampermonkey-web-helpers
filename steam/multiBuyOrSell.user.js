@@ -3,7 +3,7 @@
 // @description  -
 // @namespace    https://github.com/HenkerX64
 // @updateURL    https://raw.githubusercontent.com/HenkerX64/tampermonkey-web-helpers/main/steam/multiBuyOrSell.user.js
-// @version      0.4
+// @version      0.5
 // @description  Open dialog helper for multi buy/sell with price selection from detail page.
 // @author       Henkerx64
 // @match        *://steamcommunity.com/market/multisell*
@@ -123,7 +123,7 @@
                     const el = $('<div>Oops, ' + EResult[data.success] + ' ... </div>');
                     el.append(" <a class=\"btn_blue_white_innerfade btn_small_wide\" href=\"javascript:void(0)\">"
                               + "<span>try again</span>"
-                              + "</a>").find('a').click(function() { swhX64.clickSpreadBtn(item_nameid); });
+                              + "</a>").find('a').click(function() { swhX64.dialogHandle.Dismiss(); swhX64.clickSpreadBtn(item_nameid); });
                     $('#market_commodity_order_spread').html(el);
                 }
             });
