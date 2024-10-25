@@ -3,7 +3,7 @@
 // @description  -
 // @namespace    https://github.com/HenkerX64
 // @updateURL    https://raw.githubusercontent.com/HenkerX64/tampermonkey-web-helpers/main/steam/multiBuyOrSell.user.js
-// @version      0.6
+// @version      0.7
 // @description  Open dialog helper for multi buy/sell with price selection from detail page.
 // @author       Henkerx64
 // @match        *://steamcommunity.com/market/multisell*
@@ -108,16 +108,20 @@
                     var td_body = "<td>"
                     +" <a class=\"btn_darkblue_white_innerfade btn_small\" href=\"javascript:void(0)\" onclick=\""
                     +"$J('"+targetId+"').css('color','white').val($J(this).parent().parent().find('td:first').text());$J('.newmodal_background').click();$J('"+targetId+"').trigger('keup').trigger('blur');\""
-                    +"><span>use</span></a>"
-                    +" <a class=\"btn_darkblue_white_innerfade btn_small\" href=\"javascript:void(0)\" onclick=\""
+                    +"><span>use</span></a>";
+                    var td_body_sell = " <a class=\"btn_darkblue_white_innerfade btn_small\" href=\"javascript:void(0)\" onclick=\""
                     +"$J('"+targetId+"').css('color','white').val(parseFloat($J(this).parent().parent().find('td:first').text().replace(/[^0-9,]+/g,'').replace(',','.')) - 0.01);$J('.newmodal_background').click();$J('"+targetId+"').trigger('keup').trigger('blur');\""
                     +"><span>-</span></a>"
                     +"</td>";
+                    var td_body_buy = " <a class=\"btn_darkblue_white_innerfade btn_small\" href=\"javascript:void(0)\" onclick=\""
+                    +"$J('"+targetId+"').css('color','white').val(parseFloat($J(this).parent().parent().find('td:first').text().replace(/[^0-9,]+/g,'').replace(',','.')) + 0.01);$J('.newmodal_background').click();$J('"+targetId+"').trigger('keup').trigger('blur');\""
+                    +"><span>+</span></a>"
+                    +"</td>";
                     $tbody_forsale.find('tr:not(:first-child)').each(function(i,row) {
-                       $(row).append(td_body);
+                       $(row).append(td_body + td_body_sell);
                     });
                     $tbody_forbuy.find('tr:not(:first-child)').each(function(i,row) {
-                       $(row).append(td_body);
+                       $(row).append(td_body + td_body_buy);
                     });
                 } else {
                     const el = $('<div>Oops, ' + EResult[data.success] + ' ... </div>');
