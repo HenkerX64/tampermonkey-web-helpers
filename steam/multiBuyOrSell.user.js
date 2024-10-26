@@ -3,7 +3,7 @@
 // @description  -
 // @namespace    https://github.com/HenkerX64
 // @updateURL    https://raw.githubusercontent.com/HenkerX64/tampermonkey-web-helpers/main/steam/multiBuyOrSell.user.js
-// @version      0.7
+// @version      0.8
 // @description  Open dialog helper for multi buy/sell with price selection from detail page.
 // @author       Henkerx64
 // @match        *://steamcommunity.com/market/multisell*
