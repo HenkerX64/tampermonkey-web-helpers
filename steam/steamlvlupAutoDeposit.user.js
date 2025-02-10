@@ -33,25 +33,39 @@
 
         $('<button>', {
             id: 'auto-deposit-button',
-            text: autoDeposit ? 'Auto-Deposit OFF' : 'Auto-Deposit ON',
+            html: '<i class="fas fa-spinner"></i> Auto-Deposit is <strong>OFF</strong>',
             css: {
                 padding: '10px',
-                backgroundColor: autoDeposit ? 'red' : 'green',
-                color: 'white',
+                background: '#ebe9f4',
+                color: '#364053',
                 border: 'none',
                 borderRadius: '20px',
                 cursor: 'pointer',
                 fontSize: '16px',
-                marginRight: '10px'
+                marginRight: '10px',
+                display: 'flex',
+                alignItems: 'center',
+                fontFamily: 'SLUP-Semibold',
+                gap: '5px'
             },
             click: toggleAutoDeposit
         }).prependTo('.head-user-info');
+        updateButtonUI();
     }
 
     function updateButtonUI() {
         const button = $('#auto-deposit-button');
-        button.text(autoDeposit ? 'Auto-Deposit OFF' : 'Auto-Deposit ON');
-        button.css('backgroundColor', autoDeposit ? 'red' : 'green');
+        const icon = button.find('i');
+        const state = button.find('strong');
+
+        state.html(`${autoDeposit ? 'ON' : 'OFF'}`);
+        button.css('background', autoDeposit ? 'linear-gradient(to right, #2af599 20%, #0DBBDD 100%)' : '#ebe9f4');
+
+        if (autoDeposit) {
+            icon.addClass('fa-spin');
+        } else {
+            icon.removeClass('fa-spin');
+        }
     }
 
     function startAutoDeposit() {
