@@ -1,148 +1,328 @@
 // ==UserScript==
-// @name         Steam Market Helper
-// @description  -
+// @name         Steam - Multi-buy & Multi-sell Price Picker
+// @name:ru      Steam - Выбор цен для массовой покупки/продажи
 // @namespace    https://github.com/HenkerX64
+// @version      1.0
+// @description  Adds a button to load item price tables without opening the item page.
+// @description:ru  Добавляет кнопку для загрузки таблицы цен без перехода на страницу предмета.
+// @author       HenkerX64
+// @homepage     https://github.com/HenkerX64/tampermonkey-web-helpers
+// @supportURL   https://github.com/HenkerX64/tampermonkey-web-helpers/issues
+// @downloadURL  https://raw.githubusercontent.com/HenkerX64/tampermonkey-web-helpers/main/steam/multiBuyOrSell.user.js
 // @updateURL    https://raw.githubusercontent.com/HenkerX64/tampermonkey-web-helpers/main/steam/multiBuyOrSell.user.js
-// @version      0.8
-// @description  Open dialog helper for multi buy/sell with price selection from detail page.
-// @author       Henkerx64
 // @match        *://steamcommunity.com/market/multisell*
 // @match        *://steamcommunity.com/market/multibuy*
 // @connect      steamcommunity.com
-// @grant       GM.getValue
-// @grant       GM.setValue
-// @grant       GM_getValue
-// @grant       GM_setValue
-// @grant       GM_deleteValue
-// @grant       GM.deleteValue
-// @grant       GM_xmlhttpRequest
-// @grant       GM.xmlHttpRequest
+// @grant        none
+// @run-at       document-end
 // ==/UserScript==
 
-(function($) {
+/**
+ * README (English):
+ * This script adds a button to quickly load the price table (item-orders-histogram) directly on the mass buy/sell page.
+ * It prevents the need to open the item page and loads up to 20 price positions instead of the default 5.
+ *
+ * README (Русский):
+ * Этот скрипт добавляет кнопку, которая загружает таблицу цен (item-orders-histogram) прямо на странице массовой покупки/продажи.
+ * Это избавляет от необходимости открывать страницу предмета и загружает до 20 позиций вместо стандартных 5.
+ */
+
+/**
+ * @external UpdateOrderTotal
+ * @external ShowDialog
+ * @external g_strCountryCode
+ * @external g_strLanguage
+ * @external g_rgWalletInfo
+ * @external $J
+ */
+
+(function ($, showDialogFn, updateOrderTotalFn, language, countryCode, currencyCode) {
     'use strict';
 
-    var swhX64 = {
-        dialogHandle: null,
-        multiAction: 'sell',
-        init: function() {
-            if ($('#BG_bottom.market_multisell').length > 0) {
-                swhX64.multiAction = 'sell';
-            }else if ($('#BG_bottom.market_multibuy').length > 0) {
-                swhX64.multiAction = 'buy';
-            }else{ return; }
-
-            $('#BG_bottom.market_multi'+swhX64.multiAction+' table.market_multi_table>tbody>tr').each(function(i,tr) {
-                var nameid = $(tr).find('td:first-child input').data('nameid');
-                if (typeof nameid === 'undefined') { return; }
-                swhX64.addLoadSpreadBtn(nameid, $(tr).find('input.market_multi_price'+(swhX64.multiAction=='sell'?'_paid':'')));
-            });
+    const translations = {
+        en: {
+            open: 'prices',
+            tryAgain: 'try again',
+            use: 'use',
+            plus: '+',
+            minus: '-',
+            requestMuted: 'request disabled',
         },
-        addLoadSpreadBtn: function(id, el) {
-            $(el).after(" <a class=\"btn_blue_white_innerfade btn_small_wide\" href=\"javascript:void(0)\">"
-                        + "<span>open</span>"
-                        + "</a>").next().click(function() { swhX64.clickSpreadBtn(id); });
+        ru: {
+            open: 'цены',
+            tryAgain: 'повторить',
+            use: 'исп.',
+            plus: '+',
+            minus: '-',
+            requestMuted: 'запрос отключён',
         },
-        clickSpreadBtn: function(id) {
-            swhX64.createDialog( $('#'+swhX64.multiAction+'_'+id+'_name').text().replace(/^\s+/g,'').replace(/\s+$/g,'') );
-            swhX64.Market_LoadOrderSpread(id);
-        },
-        createDialog: function(title) {
-            if ($('#market_commodity_order_spread').length > 0) {
-                $('#market_commodity_order_spread').remove();
-            }
-            var body = "<div id=\"market_commodity_order_spread\">" +
-			"<img src=\"https://steamcommunity-a.akamaihd.net/public/images/economy/market/market_bg_949.png\" style=\"position:absolute; top:-82px; right:0; z-index: -1; opacity: 1;\">" +
-			"<div class=\"market_commodity_orders_block\" style=\"width: calc(50% - 30px)\">" +
-			"<div class=\"market_commodity_orders_interior\">" +
-			"<div class=\"market_commodity_orders_header\" style=\"min-height: auto\">" +
-			"" +
-			"<div class=\"market_commodity_order_summary\" id=\"market_commodity_forsale\" >" +
-			"</div>" +
-			"</div>" +
-			"<div id=\"market_commodity_forsale_table\" class=\"market_commodity_orders_table_container\">" +
-			"</div>" +
-			"</div>" +
-			"</div>" +
-			"<div class=\"market_commodity_orders_block\" style=\"width: calc(50% - 30px)\">" +
-			"<div class=\"market_commodity_orders_interior\">" +
-			"<div class=\"market_commodity_orders_header\" style=\"min-height: auto\">" +
-			"<div class=\"market_commodity_order_summary\" id=\"market_commodity_buyrequests\">" +
-			"</div>" +
-			"</div>" +
-			"<div id=\"market_commodity_buyreqeusts_table\" class=\"market_commodity_orders_table_container\">" +
-			"</div>" +
-			"</div>" +
-			"</div>" +
-			"</div>";
-
-            swhX64.dialogHandle = ShowDialog(title, body, {});
-        },
-        Market_LoadOrderSpread: function( item_nameid ) {
-            /** @see https://community.akamai.steamstatic.com/public/javascript/market.js*/
-            $.ajax( {
-                url: 'https://steamcommunity.com/market/itemordershistogram',
-                type: 'GET',
-                data: {
-                    country: g_strCountryCode,
-                    language: g_strLanguage,
-                    currency: typeof( g_rgWalletInfo ) != 'undefined' && g_rgWalletInfo['wallet_currency'] != 0 ? g_rgWalletInfo['wallet_currency'] : 1,
-                    item_nameid: item_nameid,
-                }
-            } ).error( function ( ) {
-            } ).success( function( data ) {
-                if ( data.success === 1 ) {
-                    $('#market_commodity_forsale').html( data.sell_order_summary );
-                    $('#market_commodity_forsale_table').html( data.sell_order_table ).find('tr:last').remove();
-                    $('#market_commodity_buyrequests').html( data.buy_order_summary );
-                    $('#market_commodity_buyreqeusts_table').html( data.buy_order_table ).find('tr:last').remove();
-                    var $tbody_forsale = $('#market_commodity_forsale_table>table>tbody');
-                    var $tbody_forbuy = $('#market_commodity_buyreqeusts_table>table>tbody');
-                    $tbody_forsale.find('tr').find('td:first').each(function(index, row) {
-                        $(row).data('price', data.sell_order_graph[index]);
-                    });
-                    $tbody_forbuy.find('tr').find('td:first').each(function(index, row) {
-                        $(row).data('price', data.buy_order_graph[index]);
-                    });
-
-                    for(const sell_graph of data.sell_order_graph.slice(5,20)) {
-                        $tbody_forsale.append('<tr><td align=right data-price="'+sell_graph[0]+'">' +data.price_prefix+' '+swhX64.formatNum(sell_graph[0])+' ' +data.price_suffix+'</td><td align=right>'+sell_graph[1]+'</td></tr>');
-                    }
-                    for(const buy_graph of data.buy_order_graph.slice(5,20)) {
-                        $tbody_forbuy.append('<tr><td align=right data-price="'+buy_graph[0]+'">'+data.price_prefix+' '+swhX64.formatNum(buy_graph[0])+' ' +data.price_suffix+'</td><td align=right>'+buy_graph[1]+'</td></tr>');
-                    }
-                    var targetId = '#'+swhX64.multiAction+"_"+item_nameid+"_price"+(swhX64.multiAction=='sell'?'_paid':'');
-                    var td_body = "<td>"
-                    +" <a class=\"btn_darkblue_white_innerfade btn_small\" href=\"javascript:void(0)\" onclick=\""
-                    +"$J('"+targetId+"').css('color','white').val($J(this).parent().parent().find('td:first').text());$J('.newmodal_background').click();$J('"+targetId+"').trigger('keup').trigger('blur');\""
-                    +"><span>use</span></a>";
-                    var td_body_sell = " <a class=\"btn_darkblue_white_innerfade btn_small\" href=\"javascript:void(0)\" onclick=\""
-                    +"$J('"+targetId+"').css('color','white').val(parseFloat($J(this).parent().parent().find('td:first').text().replace(/[^0-9,]+/g,'').replace(',','.')) - 0.01);$J('.newmodal_background').click();$J('"+targetId+"').trigger('keup').trigger('blur');\""
-                    +"><span>-</span></a>"
-                    +"</td>";
-                    var td_body_buy = " <a class=\"btn_darkblue_white_innerfade btn_small\" href=\"javascript:void(0)\" onclick=\""
-                    +"$J('"+targetId+"').css('color','white').val(parseFloat($J(this).parent().parent().find('td:first').text().replace(/[^0-9,]+/g,'').replace(',','.')) + 0.01);$J('.newmodal_background').click();$J('"+targetId+"').trigger('keup').trigger('blur');\""
-                    +"><span>+</span></a>"
-                    +"</td>";
-                    $tbody_forsale.find('tr:not(:first-child)').each(function(i,row) {
-                       $(row).append(td_body + td_body_sell);
-                    });
-                    $tbody_forbuy.find('tr:not(:first-child)').each(function(i,row) {
-                       $(row).append(td_body + td_body_buy);
-                    });
-                } else {
-                    const el = $('<div>Oops, ' + EResult[data.success] + ' ... </div>');
-                    el.append(" <a class=\"btn_blue_white_innerfade btn_small_wide\" href=\"javascript:void(0)\">"
-                              + "<span>try again</span>"
-                              + "</a>").find('a').click(function() { swhX64.dialogHandle.Dismiss(); swhX64.clickSpreadBtn(item_nameid); });
-                    $('#market_commodity_order_spread').html(el);
-                }
-            });
-        },
-        formatNum: function (num) {
-            return num.toLocaleString(g_strCountryCode, { maximumFractionDigits: 2, minimumFractionDigits: 2 });
-        }
     };
+
+    const userLang = language === 'russian' ? 'ru' : 'en';
+    const t = (key) => translations[userLang][key] || key;
+
+    function disableCancelBuyOrderRequest() {
+        if (!document.location.pathname.startsWith('/market/multibuy')) {
+            return;
+        }
+
+        const originalAjax = $.ajax;
+
+        $.ajax = function(options) {
+            /** @see https://community.akamai.steamstatic.com/public/javascript/market_multibuy.js */
+            if (options.url.includes('/market/cancelbuyorder/')) {
+                console.log(`${t('requestMuted')}:`, options.url, options.data);
+
+                const deferred = $.Deferred();
+                setTimeout(() => deferred.resolve({success: 1}), 100);
+
+                return deferred.promise();
+            }
+
+            return originalAjax.apply(this, arguments);
+        };
+    }
+
+    disableCancelBuyOrderRequest();
+
+    class SteamMarketHelper {
+        constructor() {
+            this.dialogHandle = null;
+            this.multiAction = this.detectMultiAction();
+            if (this.multiAction) {
+                this.init();
+            }
+        }
+
+        detectMultiAction() {
+            if ($('#BG_bottom.market_multisell').length > 0) {
+                return 'sell';
+            }
+            if ($('#BG_bottom.market_multibuy').length > 0) {
+                return 'buy';
+            }
+            return null;
+        }
+
+        init() {
+            const styles = `
+            <style>
+                #BG_bottom.market_multi${this.multiAction} .btn_small_wide {
+                    position: absolute;
+                    margin-left: -80px;
+                }
+                #market_commodity_order_spread > img {
+                    position: absolute;
+                    bottom: -24px;
+                    right: -22px;
+                    z-index: -1;
+                    opacity: 1;
+                    width: calc(100% + 44px);
+                }
+                #market_commodity_order_spread .market_commodity_orders_header {
+                    min-height: auto;
+                }
+            </style>
+            `;
+            $(`#BG_bottom.market_multi${this.multiAction}`).append(styles);
+            $(`#BG_bottom.market_multi${this.multiAction} table.market_multi_table > tbody > tr`)
+                .each((i, tr) => {
+                    const nameid = $(tr).find('td:first-child input').data('nameid');
+                    if (nameid) {
+                        this.addPriceLoadButton(nameid, $(tr)
+                            .find(`input.market_multi_price${this.multiAction === 'sell' ? '_paid' : ''}`));
+                    }
+                });
+        }
+
+        addPriceLoadButton(nameId, element) {
+            const button = $('<a>', {
+                class: 'btn_blue_white_innerfade btn_small_wide',
+                href: 'javascript:void(0)',
+                html: `<span>${t('open')}</span>`,
+                click: () => this.handlePriceLoadClick(nameId)
+            });
+            $(element).after(button);
+        }
+
+        handlePriceLoadClick(nameId) {
+            const title = $(`#${this.multiAction}_${nameId}_name`).text().trim();
+            this.showPriceDialog(title);
+            this.fetchPriceData(nameId);
+        }
+
+        showPriceDialog(title) {
+            const orderSpread = $('#market_commodity_order_spread');
+            if (orderSpread.length) {
+                orderSpread.remove();
+            }
+            const body = `
+            <div id="market_commodity_order_spread">
+                <img src="https://steamcommunity-a.akamaihd.net/public/images/economy/market/market_bg_949.png" alt=""/>
+                <div class="market_commodity_orders_block">
+                    <div class="market_commodity_orders_interior">
+                        <div class="market_commodity_orders_header">
+                            <div class="market_commodity_order_summary" id="market_commodity_forsale"></div>
+                        </div>
+                        <div id="market_commodity_forsale_table" class="market_commodity_orders_table_container"></div>
+                    </div>
+                </div>
+                <div class="market_commodity_orders_block">
+                    <div class="market_commodity_orders_interior">
+                        <div class="market_commodity_orders_header">
+                            <div class="market_commodity_order_summary" id="market_commodity_buyrequests"></div>
+                        </div>
+                        <div id="market_commodity_buyreqeusts_table" class="market_commodity_orders_table_container"></div>
+                    </div>
+                </div>
+                <div style="clear: both"></div>
+            </div>
+            `;
+            this.dialogHandle = showDialogFn(title, body, {});
+        }
+
+        fetchPriceData(nameId) {
+            /** @see https://community.akamai.steamstatic.com/public/javascript/market.js */
+            $.get('https://steamcommunity.com/market/itemordershistogram', {
+                country: countryCode,
+                language: language,
+                currency: currencyCode,
+                item_nameid: nameId,
+            })
+                .done((data) => this.processPriceData(data, nameId))
+                .fail(() => console.error('Failed to load market data.'));
+        }
+
+        processPriceData(data, nameId) {
+            if (data.success !== 1) {
+                this.showErrorDialog(nameId, data.success);
+                return;
+            }
+
+            $('#market_commodity_forsale').html(data.sell_order_summary);
+            $('#market_commodity_forsale_table').html(data.sell_order_table).find('tr:last').remove();
+            $('#market_commodity_buyrequests').html(data.buy_order_summary);
+            $('#market_commodity_buyreqeusts_table').html(data.buy_order_table).find('tr:last').remove();
+
+            this.extendPriceRows(data.sell_order_graph, data.buy_order_graph, data.price_prefix, data.price_suffix);
+            this.addActions(data.sell_order_graph, data.buy_order_graph, nameId);
+
+            this.recalculateDialogPosition();
+        }
+
+        showErrorDialog(nameId, errorCode) {
+            const button = $('<a>', {
+                class: 'btn_blue_white_innerfade btn_small_wide',
+                href: 'javascript:void(0)',
+                html: `<span>${t('tryAgain')}</span>`,
+                click: () => this.handleTryAgainButtonClick(nameId)
+            });
+            const element = $(`<div>Oops, ${EResult[errorCode]} ... </div>`);
+            element.append(button);
+            $('#market_commodity_order_spread').html(element);
+        }
+
+        handleTryAgainButtonClick(nameId) {
+            // noinspection JSUnresolvedReference
+            this.dialogHandle.Dismiss();
+            this.handlePriceLoadClick(nameId);
+            const title = $(`#${this.multiAction}_${nameId}_name`).text().trim();
+            this.showPriceDialog(title);
+            this.fetchPriceData(nameId);
+        }
+
+        extendPriceRows(sellOrderGraph, byuOrderGraph, prefix, suffix) {
+            const forSaleBody = $('#market_commodity_forsale_table > table > tbody');
+            for (const [price, count] of sellOrderGraph.slice(5, 20)) {
+                forSaleBody.append(`
+                    <tr>
+                        <td align="right">${prefix} ${this.formatNum(price)} ${suffix}</td>
+                        <td align="right">${count}</td>
+                    </tr>
+                `);
+            }
+            const forBuyBody = $('#market_commodity_buyreqeusts_table > table > tbody');
+            for (const [price, count] of byuOrderGraph.slice(5, 20)) {
+                forBuyBody.append(`
+                    <tr>
+                        <td align="right">${prefix} ${this.formatNum(price)} ${suffix}</td>
+                        <td align="right">${count}</td>
+                    </tr>
+                `);
+            }
+        }
+
+        addActions(sellOrderGraph, byuOrderGraph, nameId) {
+            $('#market_commodity_forsale_table > table > tbody tr:not(:first-child)').each((i, tr) => {
+                this.addActionColumn(tr, nameId, this.resolveColumnPrice(tr, sellOrderGraph[i]), -0.01);
+            });
+            $('#market_commodity_buyreqeusts_table > table > tbody tr:not(:first-child)').each((i, tr) => {
+                this.addActionColumn(tr, nameId, this.resolveColumnPrice(tr, byuOrderGraph[i]), 0.01);
+            });
+        }
+
+        addActionColumn(tr, nameId, price, nextPrice) {
+            const buttonSamePrice = $('<a>', {
+                class: 'btn_darkblue_white_innerfade btn_small',
+                href: 'javascript:void(0)',
+                html: `<span>${t('use')}</span>`,
+                click: () => this.handleActionButtonClick(nameId, price),
+            });
+            const buttonNextPrice = $('<a>', {
+                class: 'btn_darkblue_white_innerfade btn_small',
+                href: 'javascript:void(0)',
+                html: `<span>${nextPrice > 0 ? t('plus') : t('minus')}</span>`,
+                click: () => this.handleActionButtonClick(nameId, price + nextPrice),
+            });
+            const element = $(`<td>`);
+            element.append(buttonSamePrice).append(buttonNextPrice);
+            $(tr).append(element);
+        }
+
+        handleActionButtonClick(nameId, price) {
+            const element = $(`#${this.multiAction}_${nameId}_price${this.multiAction === 'sell' ? '_paid' : ''}`);
+            // v_currencyformat( info.amount, GetCurrencyCode( g_rgWalletInfo['wallet_currency'] ) );
+            element.css('color', 'white').val(price);
+            $('.newmodal_background').click();
+            element.trigger('keup').trigger('blur');
+            setTimeout(() => updateOrderTotalFn(), 100);
+        }
+
+        resolveColumnPrice(tr, orderGraph) {
+            if (orderGraph) {
+                return orderGraph[0];
+            }
+            return this.parsePriceToCents($(tr).find('td:first').text()) / 100;
+        }
+
+        formatNum(num) {
+            return num.toLocaleString(countryCode, {maximumFractionDigits: 2, minimumFractionDigits: 2});
+        }
+
+        /** same like GetPriceValueAsInt */
+        parsePriceToCents(strAmount) {
+            if (!strAmount) return 0;
+
+            strAmount = strAmount.replace(/,/g, '.');
+            strAmount = strAmount.replace(/[^\d.]/g, '').replace('.--', '.00');
+
+            if (strAmount.includes('.')) {
+                const parts = strAmount.split('.');
+                const lastPart = parts.pop();
+                strAmount = parts.join('') + '.' + lastPart;
+            }
+
+            const flAmount = parseFloat(strAmount) * 100;
+            const nAmount = Math.floor(isNaN(flAmount) ? 0 : flAmount + 0.000001);
+
+            return Math.max(nAmount, 0);
+        }
+
+        recalculateDialogPosition() {
+            setTimeout(() => window.dispatchEvent(new Event('resize')), 10);
+        }
+
+    }
 
     const EResult = {
         "0": "Invalid",
@@ -263,11 +443,9 @@
         "116": "DeniedDueToCommunityCooldown",
         "117": "NoLauncherSpecified",
         "118": "MustAgreeToSSA",
-        "119": "ClientNoLongerSupported"
+        "119": "ClientNoLongerSupported",
     };
 
-    $(document).ready( function(){
-        swhX64.init();
-    });
+    $(document).ready(() => new SteamMarketHelper());
 
-})($J);
+})($J, ShowDialog, UpdateOrderTotal, g_strLanguage, g_strCountryCode, g_rgWalletInfo?.wallet_currency || 1);
