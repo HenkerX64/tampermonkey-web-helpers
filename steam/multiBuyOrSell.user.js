@@ -2,7 +2,7 @@
 // @name         Steam - Multi-buy & Multi-sell Price Picker
 // @name:ru      Steam - Выбор цен для массовой покупки/продажи
 // @namespace    https://github.com/HenkerX64
-// @version      1.0
+// @version      1.1
 // @description  Adds a button to load item price tables without opening the item page.
 // @description:ru  Добавляет кнопку для загрузки таблицы цен без перехода на страницу предмета.
 // @author       HenkerX64
@@ -14,7 +14,7 @@
 // @match        *://steamcommunity.com/market/multibuy*
 // @connect      steamcommunity.com
 // @grant        none
-// @run-at       document-end
+// @run-at       document-body
 // ==/UserScript==
 
 /**
@@ -60,6 +60,22 @@
 
     const userLang = language === 'russian' ? 'ru' : 'en';
     const t = (key) => translations[userLang][key] || key;
+    const FILTER_ASSETS_PER_LOAD = 2500;
+
+    function fixTemporaryInventoryBadRequestErrorWithCount5000() {
+        const originalAjax = $.ajax;
+
+        $.ajax = function(options) {
+            /** @see https://community.akamai.steamstatic.com/public/javascript/market_multisell.js */
+            if (options.url.includes('/inventory/') && options.data && options.data.count && options.data.count === 5000) {
+                options.data.count = FILTER_ASSETS_PER_LOAD;
+            }
+
+            return originalAjax.apply(this, arguments);
+        };
+    }
+
+    fixTemporaryInventoryBadRequestErrorWithCount5000();
 
     function disableCancelBuyOrderRequest() {
         if (!document.location.pathname.startsWith('/market/multibuy')) {
