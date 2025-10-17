@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         DIG Steam Badge Marker
 // @namespace    https://github.com/HenkerX64
-// @version      1.0
+// @version      1.1
 // @description  Marks DailyIndieGame titles that have Steam trading cards, using cached data from steam-badges-db.
 // @author       HenkerX64
 // @homepage     https://github.com/HenkerX64/tampermonkey-web-helpers
@@ -28,13 +28,14 @@
     class SteamBadgeMarker {
         constructor() {
             this.badgesData = {};
-            this.init();
+            this.init().then();
         }
 
         async init() {
             await this.loadBadgeData();
             this.addCssStyles();
             this.markSteamGames();
+            this.markSteamGameLinks();
         }
 
         async loadBadgeData() {
@@ -95,6 +96,19 @@
             });
         }
 
+        markSteamGameLinks() {
+            const links = document.querySelectorAll("a[href^='https://store.steampowered.com/app/']");
+            links.forEach(link => {
+                const match = link.href.match(/steampowered\.com\/app\/(\d+)/);
+                if (!match) return;
+
+                const appId = match[1];
+                if (this.badgesData[appId]) {
+                    this.decorate(link);
+                }
+            });
+        }
+
         decorate(img) {
             if (!img) return;
             img.classList.add('steam-badge-game');
@@ -102,7 +116,7 @@
 
         addCssStyles() {
             const css = `
-                .steam-badge-game {
+                img.steam-badge-game {
                   display: inline-block;
                   border: 3px solid red;
                   border-radius: 9px;
@@ -112,6 +126,15 @@
                   0%   { transform: scale(1);    opacity: 1;   border-color: dark-red; }
                   50%  { transform: scale(1.05); opacity: .75; border-color: orange; }
                   100% { transform: scale(1);    opacity: 1;   border-color: red; }
+                }
+                a.steam-badge-game span {
+                  color: #eb0f9b;
+                  animation: steam-badge-game-link 3s ease-in-out infinite;
+                }
+                @keyframes steam-badge-game-link {
+                  0%   { transform: scale(1);    opacity: 1;   color: #FD5E0F; }
+                  50%  { transform: scale(1.05); opacity: .75; color: red; }
+                  100% { transform: scale(1);    opacity: 1;   color: #eb0f9b; }
                 }
           `;
             GM_addStyle(css);
