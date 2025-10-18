@@ -124,7 +124,7 @@
                 }
                 @keyframes steam-badge-game {
                   0%   { transform: scale(1);    opacity: 1;   border-color: dark-red; }
-                  50%  { transform: scale(1.05); opacity: .75; border-color: orange; }
+                  50%  { transform: scale(1.02); opacity: .75; border-color: orange; }
                   100% { transform: scale(1);    opacity: 1;   border-color: red; }
                 }
                 a.steam-badge-game span {
@@ -133,7 +133,7 @@
                 }
                 @keyframes steam-badge-game-link {
                   0%   { transform: scale(1);    opacity: 1;   color: #FD5E0F; }
-                  50%  { transform: scale(1.05); opacity: .75; color: red; }
+                  50%  { transform: scale(1.02); opacity: .75; color: red; }
                   100% { transform: scale(1);    opacity: 1;   color: #eb0f9b; }
                 }
           `;
