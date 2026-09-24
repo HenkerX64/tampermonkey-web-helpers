@@ -2,7 +2,7 @@
 // @name         OttPlayer - TV Playlist Organizer
 // @name:ru      OttPlayer - Органайзер ТВ-плейлиста
 // @namespace    https://github.com/HenkerX64
-// @version      1.0
+// @version      1.1
 // @description  Organizes an OttPlayer playlist on its edit page: library icons and EPG, 18+ locks, group moves, and a memory of every decision, so the next playlist of the same provider takes one click.
 // @description:ru  Упорядочивает плейлист OttPlayer прямо на странице редактирования: иконки и EPG из библиотеки, замки 18+, перенос по группам и память решений — следующий плейлист того же провайдера в один клик.
 // @author       HenkerX64
@@ -23,8 +23,26 @@
  * - Every channel gets its library icon, a picker that searches OttPlayer's channel library word by word
  *   (Cyrillic and Latin spellings find each other), an 18+ lock and a "move to another group" button.
  *   An unbound channel shows "no channel" in place of its icon: one click binds it.
- * - Every group gets "lock all", "unlock all" and "no channel" for its unbound channels: a channel without
- *   any binding has no timeline in the player, so its archive cannot be scrubbed.
+ * - The picker shows the channel's current binding above the results and ticks it in the list. It starts
+ *   with the title cleaned for searching: without HD, SD, FHD, UHD, HDR, 4K, TV, "channel" and +2-style
+ *   time shifts. What you type is searched as typed.
+ * - Every group has one menu (⋮) of described actions: "lock all", "unlock all", "no channel" for its
+ *   unbound channels (a channel without any binding has no timeline in the player, so its archive cannot
+ *   be scrubbed), "dissolve" — move all its channels into another group, after a confirmation with their
+ *   number, with progress and Stop — and "make favourite".
+ * - Every channel of a group whose title contains "For Adults" or «Для взрослых» is locked (18+) when the page
+ *   opens and after "Refresh list", since a playlist update brings a channel renamed at its source back
+ *   without its lock. Nothing is ever unlocked, and a channel you unlocked yourself stays unlocked.
+ * - One group per playlist can be the favourite: it is highlighted, and every channel shows a star. A click
+ *   puts a copy of the channel into the favourite group, with its icon, EPG and 18+ lock, or takes that copy
+ *   out again; the channel itself stays in its own group. The star is yellow when the favourite group holds a
+ *   channel of exactly that title, and it stays inactive when several channels share the title. "Apply
+ *   remembered" never takes a channel out of the favourite group.
+ * - When OttPlayer updates the playlist from its source, it matches channels by their exact title: a channel
+ *   renamed at the source is deleted and comes back as a new channel, without its 18+ lock or hand-chosen
+ *   binding. Afterwards run "Synchronize", which learns the new titles, and "Apply remembered", which puts
+ *   the lock and binding back by the channel code; then "Update the copies" in the favourite group's menu,
+ *   since an update never changes the address of a copy.
  * - A channel is deleted without reloading the page.
  * - Every decision is remembered in the browser, under the channel title and under the channel code
  *   of its stream address (…/ch123/…), which survives a rename and tells channels of the same name apart.
@@ -38,8 +56,26 @@
  * - У каждого канала — его иконка из библиотеки, поиск по библиотеке каналов OttPlayer по словам
  *   (кириллица и латиница находят друг друга), замок 18+ и кнопка переноса в другую группу.
  *   У непривязанного канала на месте иконки — «нет канала»: один клик, и он привязан.
- * - У каждой группы — «закрыть все», «открыть все» и «нет канала» для непривязанных: у канала без привязки
- *   в плеере нет шкалы времени, и архив по нему не мотается.
+ * - Поиск показывает текущую привязку канала над результатами и отмечает её в списке. Он начинается
+ *   с названия, очищенного для поиска: без HD, SD, FHD, UHD, HDR, 4K, ТВ, «канал» и сдвигов вида +2.
+ *   Введённое вами ищется как есть.
+ * - У каждой группы одно меню (⋮) действий с описанием: «закрыть все», «открыть все», «нет канала» для
+ *   непривязанных (у канала без привязки в плеере нет шкалы времени, и архив по нему не мотается),
+ *   «размыть» — перенести все её каналы в другую группу, с подтверждением и числом каналов, с ходом
+ *   работы и «Стоп», — и «сделать избранной».
+ * - Все каналы группы, в названии которой есть «Для взрослых» или «For Adults», закрываются (18+) при открытии
+ *   страницы и после «Обновить список»: обновление плейлиста возвращает переименованный в источнике канал
+ *   без замка. Открывать скрипт ничего не будет, а канал, который вы открыли сами, останется открытым.
+ * - Одна группа плейлиста может быть избранной: она выделена, а у каждого канала есть звезда. Клик кладёт
+ *   копию канала в избранную группу — с его иконкой, EPG и замком 18+ — или убирает эту копию обратно; сам
+ *   канал остаётся в своей группе. Звезда жёлтая, если в избранной группе есть канал точно с таким названием,
+ *   и неактивна, если такое название у нескольких каналов. «Применить запомненное» никогда не уводит канал
+ *   из избранной группы.
+ * - Когда OttPlayer обновляет плейлист из источника, он сопоставляет каналы по точному названию: канал,
+ *   переименованный в источнике, удаляется и появляется заново — без замка 18+ и выбранной вручную привязки.
+ *   После обновления нажмите «Синхронизировать» — он узнает новые названия — и «Применить запомненное»,
+ *   которое вернёт замок и привязку по коду канала, а затем «Обновить копии» в меню избранной группы:
+ *   обновление никогда не меняет адрес копии.
  * - Канал удаляется без перезагрузки страницы.
  * - Каждое решение запоминается в браузере — по названию канала и по коду канала из адреса потока
  *   (…/ch123/…): код переживает переименование и различает каналы с одинаковым названием.
@@ -53,6 +89,8 @@
  * @external unsafeWindow
  * @external GM_xmlhttpRequest
  * @external jQuery the page's own 3.3.1
+ * @external jQuery.ui the page's own jQuery UI 1.11.2: menu, for the group menu
+ * @external UIkit the page's own UIkit 3.0.0-rc.17: modal and notification, for the dissolve dialog and its result
  */
 
 (function (pageWindow) {
@@ -70,9 +108,11 @@
     const PICKER_LIMIT = 60;
     const LOG_LIMIT = 300;
     const DECORATE_THROTTLE_MS = 300;
+    const ROWS_PER_SLICE = 50;
     const GROUP_SWITCH_REDECORATE_MS = [120, 400, 900, 1800];
-    const ROW = '.channel_item.list_bar[id]';
+    const ROW = '.channel_item[id]:not(.addch)';
     const OWN_UI = '#om-panel, .om-modal, .om-ui';
+    const ADULT_GROUP = /для\s+взрослых|for\s+adults/i;
 
     const translations = {
         en: {
@@ -103,9 +143,53 @@
             lockRemove: 'remove 18+',
             moveHint: 'move to another group',
             moveTo: 'move to…',
+            groupMenuHint: 'group actions',
+            groupLock: 'Lock all (18+)',
             groupLockHint: 'lock every channel of the group (18+)',
+            groupUnlock: 'Unlock all',
             groupUnlockHint: 'unlock every channel of the group',
+            groupNoChannel: '"No channel" for the unbound',
             groupNoChannelHint: 'unbound channels → "no channel" (id 1): without a binding there is no timeline and no archive',
+            groupDissolve: 'Dissolve into another group…',
+            groupDissolveHint: 'move every channel of this group into another one, after a confirmation with their number',
+            groupFavourite: 'Make favourite',
+            groupFavouriteHint: 'one group per playlist: every channel gets a star, yellow when it is in this group',
+            groupUnfavourite: 'No longer favourite',
+            groupUnfavouriteHint: 'the stars disappear; no channel is changed',
+            adultGroupsLocked: 'groups for adults: {count} channels locked (18+)',
+            groupUpdateCopies: 'Update the copies',
+            groupUpdateCopiesHint: 'give every copy in this group its original\'s current address, binding and 18+: a playlist update changes the original\'s address, never the copy\'s',
+            labelCopies: 'copies',
+            copiesChecked: 'copies in «{group}»: {updated} of {count} updated from their originals, {left} left as they are',
+            copiesLeft: 'left as they are in «{group}», because their title does not name exactly one original and one copy: {titles}',
+            confirmUpdateCopies: 'Group «{group}»: give {count} copies the current address, binding and 18+ of their originals?',
+            confirmLeaveFavourite: '«{group}» holds {count} copies of channels from other groups. Once it is no longer the favourite group they are ordinary channels: "Apply remembered" may move each one next to its original, and "Update the copies" no longer reaches them. Continue?',
+            addressUpdated: 'new address',
+            favouriteSet: '★ favourite group: «{group}»',
+            favouriteCleared: 'no favourite group any more',
+            labelFavourite: 'favourite',
+            starAdd: 'add a copy of this channel to the favourite group «{group}»',
+            starRemove: 'in «{group}»: remove the copy from there, the channel stays where it is',
+            starAlone: '«{title}» is only in «{group}»: a channel that lives there, or a copy whose original was renamed or deleted — the star leaves it',
+            starAmbiguous: 'several channels are called «{title}»: the star cannot tell which copy is whose',
+            copyUnclear: 'one new row called like this was expected in «{group}», found {count}',
+            copyUnfinished: '«{title}»: a copy in «{group}» may be left with the site\'s own binding and no 18+ — check it there, or run "Update the copies"',
+            copyAlreadyThere: '«{title}» is in «{group}» already, so no second copy is made: the group\'s list is shown as the site has it',
+            otherStream: '«{title}» in «{group}» plays another stream than the channel of the same title elsewhere: taken for no copy and left alone. If it is one, delete it with its trash link and set the star again',
+            copyNotMoved: '«{title}» is not moved: the favourite group keeps exactly one copy of it',
+            dissolveTitle: 'Dissolve «{group}»',
+            dissolveTarget: 'move its channels to',
+            dissolveChoose: '{count} channels are in «{from}». Choose the group that takes them.',
+            dissolveCount: '{count} channels will move from «{from}» to «{to}».',
+            dissolveConfirm: 'Move {count} channels',
+            dissolveDone: '«{from}» → «{to}»: moved {moved} of {total}',
+            groupEmpty: 'group «{group}» has no channels',
+            labelDissolve: 'dissolve',
+            cancel: 'Cancel',
+            jqueryUiMissing: 'jQuery UI is not on this page: the group menu opens as a plain list, without keyboard control',
+            uikitMissing: 'no UIkit modal on this page: the dissolve dialog opens in the organizer\'s own window',
+            currentBinding: 'current binding',
+            currentUnbound: 'not bound',
             headerProfile: 'profile {profile} · decisions {byTitle} by title, {byCode} by ch · library {library} · probes {probes}',
             headerGroup: 'group {total} of {all}, ch known for {withCode} · unbound {unbound} · "no channel" {noChannel} · 18+ {adult} · pending {pending}',
             searchPlaceholder: 'search the library…',
@@ -137,7 +221,7 @@
             scopePlaylist: 'in the playlist',
             scopeGroup: 'in the open group',
             confirmApply: 'Apply remembered decisions to {count} channels {scope}?',
-            confirmApplyGroupChecks: 'Of these, {count} only check the group (one request per channel).',
+            confirmApplyGroupChecks: 'Of these, {count} only move to another group.',
             readingNamesakes: 'titles shared by several channels, ch unknown: {count} — reading their addresses to tell them apart',
             loadingSource: 'loading the source… Tampermonkey may ask to allow the domain',
             sourceLoaded: 'source: {channels} channels, {titles} titles, {added} new',
@@ -226,9 +310,53 @@
             lockRemove: 'снять 18+',
             moveHint: 'перенести в другую группу',
             moveTo: 'перенести в…',
+            groupMenuHint: 'действия с группой',
+            groupLock: 'Закрыть все (18+)',
             groupLockHint: 'закрыть все каналы группы (18+)',
+            groupUnlock: 'Открыть все',
             groupUnlockHint: 'открыть все каналы группы',
+            groupNoChannel: '«Нет канала» непривязанным',
             groupNoChannelHint: 'всем без привязки — «нет канала» (id 1): без неё у канала нет шкалы и архив не мотается',
+            groupDissolve: 'Размыть в другую группу…',
+            groupDissolveHint: 'перенести все каналы группы в другую — после подтверждения с их числом',
+            groupFavourite: 'Сделать избранной',
+            groupFavouriteHint: 'одна группа на плейлист: у каждого канала звезда, жёлтая — если он в этой группе',
+            groupUnfavourite: 'Больше не избранная',
+            groupUnfavouriteHint: 'звёзды пропадут, каналы не меняются',
+            adultGroupsLocked: 'группы для взрослых: закрыто каналов (18+): {count}',
+            groupUpdateCopies: 'Обновить копии',
+            groupUpdateCopiesHint: 'дать каждой копии в группе текущие адрес, привязку и 18+ её оригинала: обновление плейлиста меняет адрес оригинала, но не копии',
+            labelCopies: 'копии',
+            copiesChecked: 'копии в «{group}»: обновлено по оригиналу {updated} из {count}, оставлено как есть {left}',
+            copiesLeft: 'оставлены как есть в «{group}»: по их названию нет ровно одного оригинала и одной копии — {titles}',
+            confirmUpdateCopies: 'Группа «{group}»: дать {count} копиям текущие адрес, привязку и 18+ их оригиналов?',
+            confirmLeaveFavourite: 'В «{group}» копий каналов из других групп: {count}. Когда группа перестанет быть избранной, это обычные каналы: «Применить запомненное» может перенести каждую к её оригиналу, а «Обновить копии» их больше не обновит. Продолжить?',
+            addressUpdated: 'новый адрес',
+            favouriteSet: '★ избранная группа: «{group}»',
+            favouriteCleared: 'избранной группы больше нет',
+            labelFavourite: 'избранное',
+            starAdd: 'добавить копию канала в избранную группу «{group}»',
+            starRemove: 'есть в «{group}»: убрать оттуда копию, сам канал остаётся на месте',
+            starAlone: '«{title}» есть только в «{group}»: канал, который там живёт, или копия, чей оригинал переименован или удалён, — звезда его не трогает',
+            starAmbiguous: 'каналов с названием «{title}» несколько: звезда не может понять, чья копия чья',
+            copyUnclear: 'в «{group}» ожидалась одна новая строка с этим названием, найдено {count}',
+            copyUnfinished: '«{title}»: копия в «{group}» могла остаться с привязкой сайта и без 18+ — проверьте её там или нажмите «Обновить копии»',
+            copyAlreadyThere: '«{title}» уже есть в «{group}», вторая копия не создаётся: список группы показан таким, какой он на сайте',
+            otherStream: '«{title}» в «{group}» играет другой поток, чем канал с тем же названием вне группы: не считается копией и оставлен как есть. Если это всё же копия — удалите её корзиной и поставьте звезду заново',
+            copyNotMoved: '«{title}» не перенесён: в избранной группе остаётся ровно одна его копия',
+            dissolveTitle: 'Размыть «{group}»',
+            dissolveTarget: 'перенести её каналы в',
+            dissolveChoose: 'В «{from}» каналов: {count}. Выберите группу, которая их примет.',
+            dissolveCount: 'Из «{from}» в «{to}» перейдёт каналов: {count}.',
+            dissolveConfirm: 'Перенести каналов: {count}',
+            dissolveDone: '«{from}» → «{to}»: перенесено {moved} из {total}',
+            groupEmpty: 'в группе «{group}» нет каналов',
+            labelDissolve: 'размытие',
+            cancel: 'Отмена',
+            jqueryUiMissing: 'на странице нет jQuery UI: меню группы открывается простым списком, без управления с клавиатуры',
+            uikitMissing: 'на странице нет окна UIkit (modal): окно размытия открывается окном органайзера',
+            currentBinding: 'текущая привязка',
+            currentUnbound: 'не привязан',
             headerProfile: 'профиль {profile} · решений {byTitle} по названию, {byCode} по ch · библиотека {library} · запросов {probes}',
             headerGroup: 'в группе {total} из {all}, ch известен у {withCode} · без привязки {unbound} · «нет канала» {noChannel} · 18+ {adult} · ждут {pending}',
             searchPlaceholder: 'поиск по библиотеке…',
@@ -260,7 +388,7 @@
             scopePlaylist: 'в плейлисте',
             scopeGroup: 'в открытой группе',
             confirmApply: 'Применить запомненное к {count} каналам {scope}?',
-            confirmApplyGroupChecks: 'Из них {count} — только проверка группы (один запрос на канал).',
+            confirmApplyGroupChecks: 'Из них {count} — только перенос в другую группу.',
             readingNamesakes: 'одинаковых названий без ch: {count} — читаю их адреса, чтобы различить',
             loadingSource: 'загружаю источник… Tampermonkey может спросить разрешение на домен',
             sourceLoaded: 'источник: {channels} каналов, названий {titles}, новых {added}',
@@ -365,6 +493,13 @@
         };
     }
 
+    async function inSlices(items, work) {
+        for (let start = 0; start < items.length; start += ROWS_PER_SLICE) {
+            if (start) await sleep(0);
+            items.slice(start, start + ROWS_PER_SLICE).forEach(work);
+        }
+    }
+
     async function waitUntil(condition, isStopped, attempts = 15) {
         for (let attempt = 0; attempt < attempts && !isStopped(); attempt++) {
             if (condition()) return true;
@@ -408,6 +543,9 @@
     const CYRILLIC_LOOKALIKES_OF_LATIN = Object.fromEntries(
         Object.entries(LATIN_LOOKALIKES_OF_CYRILLIC).map(([latin, cyrillic]) => [cyrillic, latin]));
 
+    const QUALITY_WORD = /^(?:[hн]d|sd|f[hн]d|u[hн]d|[hн]dr|4[kк])$/;
+    const TV_OR_CHANNEL_WORD = /^(?:tv|[tт]в|т[vb]|канал|channel)$/;
+
     const isCyrillic = char => /[Ѐ-ӿ]/.test(char);
     const isLatin = char => char >= 'a' && char <= 'z';
     const consonants = word => word.replace(/[aeiou]/g, '');
@@ -426,6 +564,29 @@
 
         static words(text) {
             return ChannelTitle.key(text).replace(/[^\p{L}\p{N} ]/gu, ' ').split(' ').filter(Boolean);
+        }
+
+        static startPhrase(title) {
+            const words = ChannelTitle.words(ChannelTitle.withoutTimeshift(title));
+            const withoutNoise = words.filter(word => !ChannelTitle.isNoiseWord(word)).flatMap(ChannelTitle.splitTrailingNumber);
+            const withoutQuality = words.filter(word => !QUALITY_WORD.test(word));
+            return ([withoutNoise, withoutQuality].find(ChannelTitle.hasLetter) || words).join(' ');
+        }
+
+        static withoutTimeshift(title) {
+            return String(title || '').replace(/\s*\+\d+/g, ' ');
+        }
+
+        static isNoiseWord(word) {
+            return QUALITY_WORD.test(word) || TV_OR_CHANNEL_WORD.test(word);
+        }
+
+        static splitTrailingNumber(word) {
+            return word.replace(/(\p{L})(\d+)$/u, '$1 $2').split(' ');
+        }
+
+        static hasLetter(words) {
+            return words.some(word => /\p{L}/u.test(word));
         }
 
         static fold(text) {
@@ -475,6 +636,51 @@
 
         static hasSameConsonants(word, nameWord) {
             return word.length >= 5 && nameWord.length >= 5 && consonants(word) === consonants(nameWord);
+        }
+    }
+
+    const Star = Object.freeze({ OFF: 'off', ON: 'on', ALONE: 'alone', AMBIGUOUS: 'ambiguous' });
+
+    class FavouriteCopies {
+        /** a channel has exactly one group, so its copy in the favourite group is a channel of its own: only the exact title ties the two */
+        static indexOf(rows, favouriteId) {
+            const index = { insideIds: new Set(), insideByTitle: new Map(), outsideByTitle: new Map() };
+            rows.forEach(({ uuid, title, groupId }) => {
+                const inside = groupId === favouriteId;
+                const byTitle = inside ? index.insideByTitle : index.outsideByTitle;
+                if (inside) index.insideIds.add(uuid);
+                byTitle.set(title, (byTitle.get(title) || []).concat(uuid));
+            });
+            return index;
+        }
+
+        static starOf(channel, index) {
+            const copies = FavouriteCopies.idsOf(index.insideByTitle, channel).length;
+            const originals = FavouriteCopies.idsOf(index.outsideByTitle, channel).length;
+            if (copies > 1 || originals > 1) return Star.AMBIGUOUS;
+            if (index.insideIds.has(channel.uuid)) return originals ? Star.ON : Star.ALONE;
+            return copies ? Star.ON : Star.OFF;
+        }
+
+        static copyIdOf(channel, index) {
+            return FavouriteCopies.onlyIdOf(index.insideByTitle, channel);
+        }
+
+        static originalIdOf(channel, index) {
+            return FavouriteCopies.onlyIdOf(index.outsideByTitle, channel);
+        }
+
+        static onlyIdOf(byTitle, channel) {
+            const ids = FavouriteCopies.idsOf(byTitle, channel);
+            return ids.length === 1 ? ids[0] : null;
+        }
+
+        static idsOf(byTitle, channel) {
+            return byTitle.get(channel.title) || [];
+        }
+
+        static hintOf(star) {
+            return { [Star.OFF]: 'starAdd', [Star.ON]: 'starRemove', [Star.ALONE]: 'starAlone', [Star.AMBIGUOUS]: 'starAmbiguous' }[star];
         }
     }
 
@@ -609,11 +815,16 @@
             return ['profiles', 'chmaps', 'titleCh', 'rowCh', 'noChannel'];
         }
 
+        static get MAPS() {
+            return ['library', 'queries', 'favouriteGroups'];
+        }
+
         /** every map keyed by titles, codes or ids is prototype-free, so no key can reach Object.prototype */
         load() {
             const data = Object.assign({ version: 1, settings: {} }, this.readJson());
-            data.library = dictionary(data.library);
-            data.queries = dictionary(data.queries);
+            Store.MAPS.forEach(name => {
+                data[name] = dictionary(data[name]);
+            });
             Store.BUCKETS.forEach(name => {
                 data[name] = Store.bucketsWithoutEmpty(data[name]);
             });
@@ -628,9 +839,7 @@
 
         mergeFromStorage() {
             const fresh = this.load();
-            Object.assign(this.data.library, fresh.library);
-            Object.assign(this.data.queries, fresh.queries);
-            Object.assign(this.data.settings, fresh.settings);
+            Store.MAPS.concat('settings').forEach(name => Object.assign(this.data[name], fresh[name]));
             Store.BUCKETS.forEach(name => Store.mergeBuckets(this.data[name], fresh[name]));
         }
 
@@ -665,8 +874,8 @@
         }
 
         fullExport(currentProfile) {
-            const { library, queries, profiles, chmaps, titleCh, rowCh, noChannel } = this.data;
-            return Object.assign(Store.stamp(), { profile: currentProfile, library, queries, profiles, chmaps, titleCh, rowCh, noChannel });
+            const { library, queries, profiles, chmaps, titleCh, rowCh, noChannel, favouriteGroups } = this.data;
+            return Object.assign(Store.stamp(), { profile: currentProfile, library, queries, profiles, chmaps, titleCh, rowCh, noChannel, favouriteGroups });
         }
 
         static mergeBuckets(target, source) {
@@ -796,11 +1005,11 @@
             return wanted;
         }
 
-        /** a row does not show its group, so a remembered group is always asked for */
+        /** the list a row sits in is its group; a row outside any known list is asked for its remembered group */
         static changesTo(decision, channel, groupsByTitle) {
             const wanted = Decisions.visibleChangesTo(decision, channel);
             const group = decision.group && groupsByTitle.get(groupKey(decision.group));
-            if (group) wanted.group_id = group.id;
+            if (group && group.id !== channel.groupId) wanted.group_id = group.id;
             return wanted;
         }
 
@@ -839,6 +1048,23 @@
 
         isKnownNoChannel(uuid) {
             return Boolean(this.noChannelRows()[uuid]);
+        }
+
+        favouriteGroupId() {
+            return String(this.data.favouriteGroups[this.playlistId] || '');
+        }
+
+        isFavouriteGroup(groupId) {
+            return Boolean(groupId) && groupId === this.favouriteGroupId();
+        }
+
+        setFavouriteGroup(groupId) {
+            this.data.favouriteGroups[this.playlistId] = groupId;
+        }
+
+        /** an empty id rather than a deleted key: merging another tab's save would bring a deleted key back */
+        clearFavouriteGroup() {
+            this.data.favouriteGroups[this.playlistId] = '';
         }
 
         learnSource(channels) {
@@ -891,6 +1117,7 @@
             Store.mergeBuckets(this.data.titleCh, backup.titleCh);
             Store.mergeBuckets(this.data.rowCh, backup.rowCh);
             Store.mergeBuckets(this.data.noChannel, backup.noChannel);
+            Object.assign(this.data.favouriteGroups, backup.favouriteGroups);
             return { byTitle, byCode };
         }
     }
@@ -909,6 +1136,10 @@
 
         get probeCount() {
             return size(this.store.data.queries);
+        }
+
+        nameOf(id) {
+            return this.store.data.library[id] || '';
         }
 
         merge(found) {
@@ -1050,6 +1281,11 @@
             return this.requestWithoutFollowingRedirects(url, { method: 'POST', headers, body: $.param(data) });
         }
 
+        /** the playlist page's own form#newChForm posts exactly these four fields; with the binding and 18+ fields added, one trial created nothing */
+        createChannel({ playlistId, groupId, name, href }) {
+            return this.postForm('/playlist/newchannel', { pl_id: playlistId, grp_id: groupId, name, href });
+        }
+
         /** @see https://ottplayer.tv/public/js/main.js .delete_ch builds exactly this link for its confirm button */
         deleteChannel(channelId, playlistId) {
             return this.requestWithoutFollowingRedirects(`/channel/delete/${channelId}/${playlistId}`,
@@ -1089,6 +1325,75 @@
             return $(`.sub_block_list .uk-active ${ROW}`);
         }
 
+        groupRows(groupId) {
+            return PlaylistPage.groupRowsIn(document, groupId);
+        }
+
+        static groupRowsIn(doc, groupId) {
+            return $(doc).find(`${PlaylistPage.groupListSelector(groupId)} ${ROW}`);
+        }
+
+        /** @see https://ottplayer.tv/public/js/playlist_page.js a group's channel list is #gp_<group id>: its drag-and-drop appends a moved channel there */
+        static groupListSelector(groupId) {
+            return `#gp_${$.escapeSelector(groupId)}`;
+        }
+
+        static groupIdOf($row) {
+            return String($row.closest('ul[id^="gp_"]').attr('id') || '').slice(3) || null;
+        }
+
+        isInGroup(uuid, groupId) {
+            return Boolean(groupId) && PlaylistPage.groupIdOf(this.rowById(uuid)) === groupId;
+        }
+
+        rowTitles() {
+            return this.allRows().map((index, row) => ({ uuid: row.id, title: PlaylistPage.cachedTitleOf($(row)), groupId: PlaylistPage.groupIdOf($(row)) })).get();
+        }
+
+        cacheTitlesWithoutFreezing() {
+            return inSlices(this.allRows().not('[data-om-title]').toArray(), row => PlaylistPage.cacheTitleOf($(row)));
+        }
+
+        /** @see https://ottplayer.tv/public/js/main.js the page binds its own handlers to each row once at load, so kept rows stay and only new ones come in */
+        static updateGroupRowsFrom(doc, groupId) {
+            const $list = $(PlaylistPage.groupListSelector(groupId));
+            const $fresh = PlaylistPage.groupRowsIn(doc, groupId);
+            const freshIds = new Set($fresh.map((index, row) => row.id).get());
+            const keptIds = new Set($list.children(ROW).map((index, row) => row.id).get());
+            $list.children(ROW).filter((index, row) => !freshIds.has(row.id)).remove();
+            $fresh.filter((index, row) => !keptIds.has(row.id)).clone().attr('data-om-inserted', '').appendTo($list);
+            PlaylistPage.recountGroup(groupId);
+        }
+
+        static isInsertedRow($row) {
+            return $row.is('[data-om-inserted]');
+        }
+
+        /** @see https://ottplayer.tv/public/js/playlist_page.js its own move appends the row to the target list, so the page stays whole */
+        static moveRowTo($row, groupId) {
+            const $list = $(PlaylistPage.groupListSelector(groupId));
+            if (!$list.length) {
+                PlaylistPage.removeRow($row);
+                return;
+            }
+            const fromId = PlaylistPage.groupIdOf($row);
+            $row.children('.om-bar').remove();
+            $row.appendTo($list);
+            [fromId, groupId].filter(Boolean).forEach(id => PlaylistPage.recountGroup(id));
+        }
+
+        static removeRow($row) {
+            const groupId = PlaylistPage.groupIdOf($row);
+            $row.remove();
+            if (groupId) PlaylistPage.recountGroup(groupId);
+        }
+
+        /** @see https://ottplayer.tv/public/js/playlist_page.js gpChsCnt: a group's count is its list's children, less the "create channel" entry */
+        static recountGroup(groupId) {
+            const $list = $(PlaylistPage.groupListSelector(groupId));
+            if ($list.length) $(`#gpChsCnt_${$.escapeSelector(groupId)}`).text(`(${$list.children().length - 1})`);
+        }
+
         rowOf(element) {
             return $(element).closest('.channel_item[id]');
         }
@@ -1111,6 +1416,7 @@
                 url: OttPlayerSite.siteUrl(editLink || `/channel/edit/${uuid}/${this.playlistId}`),
                 libId: $row.attr('data-om-lib') || LibraryIcon.idOf(PlaylistPage.pageIconOf($row)),
                 adult: $row.find('sup.adult').length > 0,
+                groupId: PlaylistPage.groupIdOf($row),
             };
         }
 
@@ -1120,8 +1426,12 @@
         }
 
         static cachedTitleOf($row) {
-            if ($row.attr('data-om-title') === undefined) $row.attr('data-om-title', PlaylistPage.visibleTitleOf($row));
+            PlaylistPage.cacheTitleOf($row);
             return $row.attr('data-om-title');
+        }
+
+        static cacheTitleOf($row) {
+            if ($row.attr('data-om-title') === undefined) $row.attr('data-om-title', PlaylistPage.visibleTitleOf($row));
         }
 
         static visibleTitleOf($row) {
@@ -1387,6 +1697,7 @@
             }
             this.panel.status('');
             if (summary && items.length > 1) this.panel.log(BatchRunner.summary(label, items.length, tally));
+            return tally;
         }
 
         async attempt(step, item, failuresSoFar) {
@@ -1443,6 +1754,13 @@
         logFailure(message, error) {
             this.log(message, 'err');
             if (error.url) this.log(error.url, 'code');
+        }
+
+        /** UIkit.notification takes its message as HTML */
+        logAndToast(text, kind) {
+            this.log(text, kind);
+            const uikit = pageWindow.UIkit;
+            if (uikit && uikit.notification) uikit.notification(escapeHtml(text), { status: kind === 'warn' ? 'warning' : 'success', pos: 'top-center' });
         }
 
         status(text) {
@@ -1522,10 +1840,27 @@
 .om-b:hover{background:#eef1f4}
 .om-b svg,.om-b img{display:block}
 .om-set-noch{gap:4px;padding:1px 5px;border-style:dashed}
-.om-adult,.om-g0{color:#8a949d}
-.om-g1{color:#c62828}
+.om-adult{color:#8a949d}
 .om-adult.on{background:#c62828;border-color:#a91f1f;color:#fff}
-.om-gepg img{width:18px;height:18px;object-fit:contain}
+.om-gmenu{font-size:13px;line-height:1;padding:1px 7px}
+.om-b.om-star{padding:0 3px;border:0;background:none;font-size:15px;line-height:1;color:#8a949d;opacity:.4}
+.om-b.om-star.on{color:#f5b301;opacity:1}
+.om-b.om-star:disabled{cursor:help;opacity:.2}
+.om-b.om-star.om-alone{outline:1px dashed #f5b301;outline-offset:1px;border-radius:3px}
+.om-fav{background:rgba(245,179,1,.14);box-shadow:inset 3px 0 0 #f5b301}
+.om-fav>a.no_transform::after{content:' ★';color:#f5b301}
+.om-menu{position:absolute;z-index:100001;width:280px;margin:0;padding:4px;list-style:none;background:#fff;color:#18202a;
+  border:1px solid #c5ccd3;border-radius:8px;box-shadow:0 10px 30px rgba(0,0,0,.2);font:12px/1.35 system-ui,sans-serif;outline:none}
+.om-menu li{padding:6px 9px;border-radius:6px;cursor:pointer}
+.om-menu li:hover,.om-menu li.ui-state-focus{background:#eef3fb}
+.om-mt{font-weight:600}
+.om-md{margin-top:1px;font-size:11px;color:#5a6672}
+@keyframes om-pulse{50%{opacity:.35}}
+@keyframes om-spin{to{transform:rotate(360deg)}}
+.om-busy>.om-bar,.om-busy>.om-gbar{animation:om-pulse .9s ease-in-out infinite}
+.om-spin::before{content:'';display:inline-block;width:9px;height:9px;margin-right:6px;vertical-align:-1px;
+  border:2px solid currentColor;border-right-color:transparent;border-radius:50%;animation:om-spin .7s linear infinite}
+@media (prefers-reduced-motion:reduce){.om-busy>.om-bar,.om-busy>.om-gbar,.om-spin::before{animation:none}}
 .om-grp{max-width:160px;font:10px system-ui;padding:2px 4px;border:1px solid #b6bec6;border-radius:5px;background:#fff}
 .om-noart{opacity:.45}
 .om-modal{position:fixed;inset:0;z-index:100000;background:rgba(12,18,25,.55);display:flex;align-items:center;
@@ -1537,6 +1872,14 @@
 .om-q{flex:1;padding:7px 11px;border:1px solid #c5ccd3;border-radius:7px;font:13px system-ui}
 .om-q:focus{outline:none;border-color:#1f6feb;box-shadow:0 0 0 3px rgba(31,111,235,.15)}
 .om-hint{padding:5px 14px;font-size:11px;color:#68727d;background:#f8fafb;border-bottom:1px solid #eef2f5;min-height:1.4em}
+.om-current{display:flex;align-items:center;gap:9px;padding:6px 14px;border-bottom:1px solid #eef2f5;font-size:12px}
+.om-current img{width:28px;height:28px;object-fit:contain;background:#fff;border-radius:4px}
+.om-cur-l{color:#68727d}
+.om-it.om-cur{border-color:#1f6feb;background:#e7f0ff}
+.om-check{color:#1f6feb;font-weight:700}
+.om-dissolve .uk-select{margin:4px 0 12px}
+.om-dissolve progress{width:100%}
+.om-dlg.om-small{width:min(480px,96vw);padding:18px 20px;gap:10px}
 .om-list{overflow:auto;padding:10px 12px;display:grid;grid-template-columns:repeat(auto-fill,minmax(330px,1fr));gap:7px}
 .om-it{display:flex;align-items:center;gap:11px;padding:7px 11px;border:1px solid #d9ecdf;border-radius:8px;background:#eefaf1;cursor:pointer}
 .om-it:hover{background:#dff3e7;border-color:#1f6feb}
@@ -1549,21 +1892,94 @@
         }
     }
 
+    class GroupMenu {
+        constructor() {
+            this.$menu = null;
+            this.$button = null;
+            this.usesWidget = false;
+            this.onChoose = () => null;
+        }
+
+        mount() {
+            this.usesWidget = GroupMenu.widgetAvailable();
+            this.$menu = $('<ul class="om-ui om-menu">').hide().appendTo('body');
+            if (this.usesWidget) {
+                this.$menu.menu({ select: (event, ui) => this.choose(ui.item) });
+            } else {
+                this.$menu.on('click', 'li', event => this.choose($(event.currentTarget)));
+            }
+            $(document)
+                .on('mousedown', event => this.closeUnlessInside(event.target))
+                .on('keydown', event => this.closeOnEscape(event));
+        }
+
+        static widgetAvailable() {
+            return Boolean($.fn.menu);
+        }
+
+        static item(action, titleKey, hintKey) {
+            return $('<li>').attr('data-om-action', action)
+                .append($('<div class="om-mt">').text(t(titleKey)), $('<div class="om-md">').text(t(hintKey)));
+        }
+
+        open($button, items, onChoose) {
+            this.$button = $button;
+            this.onChoose = onChoose;
+            this.$menu.empty().append(items).show();
+            if (this.usesWidget) this.$menu.menu('refresh');
+            this.placeBelow($button);
+            this.$menu.trigger('focus');
+        }
+
+        /** jQuery UI 1.11.2's position() throws beside the page's jQuery 3.3.1: it asks for $(window).offset() */
+        placeBelow($button) {
+            const offset = $button.offset();
+            const rightmost = $(window).scrollLeft() + $(window).width() - this.$menu.outerWidth() - 8;
+            this.$menu.offset({ left: Math.max(0, Math.min(offset.left, rightmost)), top: offset.top + $button.outerHeight() + 2 });
+        }
+
+        choose($item) {
+            this.close();
+            this.onChoose($item.attr('data-om-action'));
+        }
+
+        isOpen() {
+            return this.$menu.is(':visible');
+        }
+
+        close() {
+            this.$menu.hide();
+        }
+
+        closeUnlessInside(target) {
+            if (this.isOpen() && !$(target).closest(this.$menu).length) this.close();
+        }
+
+        closeOnEscape(event) {
+            if (event.key !== 'Escape' || !this.isOpen()) return;
+            this.close();
+            this.$button.trigger('focus');
+        }
+    }
+
     class PlaylistView {
-        constructor(page, decisions, library, panel) {
+        constructor(page, decisions, library, panel, menu) {
             this.page = page;
             this.decisions = decisions;
             this.library = library;
             this.panel = panel;
+            this.menu = menu;
         }
 
         mount(handlers) {
             this.handlers = handlers;
+            this.menu.mount();
             $(document)
                 .on('click', '.om-bar [data-om-action]', event => this.handleRowButton(event))
                 .on('click', '.om-gbar [data-om-action]', event => this.handleGroupButton(event))
                 .on('click', PlaylistPage.GROUP_SWITCH, () => this.redecorateAfterGroupSwitch());
             LibraryIcon.replaceMissingWithPlaceholder();
+            this.showKnownNoChannelRows();
             this.redecorateWhenPageAddsElements();
             setTimeout(() => {
                 this.showKnownNoChannelRows();
@@ -1583,10 +1999,11 @@
             const $button = $(event.currentTarget);
             const $row = this.page.rowOf($button);
             const action = $button.attr('data-om-action');
+            if ($row.hasClass('om-busy')) return;
             if (action === 'chooseGroup') {
                 this.showMoveSelect($row, $button);
             } else {
-                this.handlers[action]($row);
+                this.whileWorking($row, this.handlers[action]($row));
             }
         }
 
@@ -1595,7 +2012,39 @@
             event.stopPropagation();
             const $button = $(event.currentTarget);
             const group = this.page.groupById($button.closest('.om-gbar').attr('data-gid'));
-            if (group) this.handlers[$button.attr('data-om-action')](group);
+            if (group) this.menu.open($button, this.groupMenuItems(group), action => this.runGroupAction(action, group.id));
+        }
+
+        groupMenuItems(group) {
+            const items = [
+                GroupMenu.item('lockGroup', 'groupLock', 'groupLockHint'),
+                GroupMenu.item('unlockGroup', 'groupUnlock', 'groupUnlockHint'),
+                GroupMenu.item('noChannel', 'groupNoChannel', 'groupNoChannelHint'),
+            ];
+            if (this.decisions.isFavouriteGroup(group.id)) {
+                return items.concat(
+                    GroupMenu.item('updateCopies', 'groupUpdateCopies', 'groupUpdateCopiesHint'),
+                    GroupMenu.item('clearFavourite', 'groupUnfavourite', 'groupUnfavouriteHint'));
+            }
+            return items.concat(
+                GroupMenu.item('dissolveGroup', 'groupDissolve', 'groupDissolveHint'),
+                GroupMenu.item('setFavourite', 'groupFavourite', 'groupFavouriteHint'));
+        }
+
+        runGroupAction(action, groupId) {
+            const group = this.page.groupById(groupId);
+            if (group) this.whileWorking(group.$tab, this.handlers[action](group));
+        }
+
+        /** work inside work leaves the mark to the outer one, which ends last */
+        async whileWorking($element, work) {
+            if ($element.hasClass('om-busy')) return work;
+            $element.addClass('om-busy');
+            try {
+                return await work;
+            } finally {
+                $element.removeClass('om-busy');
+            }
         }
 
         /** the page re-renders its lists; our own inserts are ignored, or decorating would feed itself */
@@ -1619,31 +2068,59 @@
         }
 
         redecorateAll() {
+            this.dropBarsOfClosedGroups();
             this.decorate(this.page.openGroupRows());
         }
 
-        decorate($rows) {
-            $rows.each((index, row) => this.decorateRow($(row)));
-            this.page.groups().forEach(group => this.decorateGroup(group));
+        dropBarsOfClosedGroups() {
+            this.page.allRows().not(this.page.openGroupRows()).children('.om-bar').remove();
+        }
+
+        async decorate($rows) {
+            if ($rows.length) {
+                if (this.favouriteGroup()) await this.page.cacheTitlesWithoutFreezing();
+                const favourites = this.favouriteIndex();
+                await inSlices($rows.toArray(), row => this.decorateRow($(row), favourites));
+            }
+            this.decorateGroups();
             this.updateHeader();
         }
 
         redrawRow($row) {
-            if ($row.children('.om-bar').length) this.decorateRow($row);
+            if ($row.children('.om-bar').length) this.decorateRow($row, this.favouriteIndex());
         }
 
-        decorateRow($row) {
+        decorateRow($row, favourites) {
             $row.children('.om-bar').remove();
             const channel = this.page.channel($row);
-            $('<span class="om-ui om-bar">')
+            const $bar = $('<span class="om-ui om-bar">')
                 .addClass(this.stateOf(channel))
                 .toggleClass('om-locked', channel.adult)
                 .append(PlaylistView.bindingOf(channel))
                 .append(PlaylistView.button('pick', 'om-pick', t('pickHint'), t('pick')))
                 .append(PlaylistView.button('toggleAdult', `om-adult${channel.adult ? ' on' : ''}`,
                     t(channel.adult ? 'lockRemove' : 'lockSet'), PlaylistView.lock(channel.adult)))
-                .append(PlaylistView.button('chooseGroup', 'om-mv', t('moveHint'), '&#8644;'))
-                .appendTo($row);
+                .append(PlaylistView.button('chooseGroup', 'om-mv', t('moveHint'), '&#8644;'));
+            if (favourites) $bar.append(PlaylistView.starButtonOf(channel, favourites));
+            $bar.appendTo($row);
+        }
+
+        favouriteGroup() {
+            return this.page.groupById(this.decisions.favouriteGroupId());
+        }
+
+        favouriteIndex() {
+            const group = this.favouriteGroup();
+            return group ? Object.assign({ group }, FavouriteCopies.indexOf(this.page.rowTitles(), group.id)) : null;
+        }
+
+        static starButtonOf(channel, favourites) {
+            const star = FavouriteCopies.starOf(channel, favourites);
+            const hint = t(FavouriteCopies.hintOf(star), { title: channel.title, group: favourites.group.title });
+            return PlaylistView.button('toggleStar', 'om-star', hint, '★')
+                .toggleClass('on', star === Star.ON || star === Star.ALONE)
+                .toggleClass('om-alone', star === Star.ALONE)
+                .prop('disabled', star === Star.AMBIGUOUS);
         }
 
         /** an unbound row offers "no channel" right where its binding would be: one click instead of the picker */
@@ -1661,13 +2138,16 @@
             return channel.libId === NO_CHANNEL ? 'om-noch' : 'om-bound';
         }
 
+        decorateGroups() {
+            this.page.groups().forEach(group => this.decorateGroup(group));
+        }
+
         decorateGroup(group) {
+            group.$tab.toggleClass('om-fav', this.decisions.isFavouriteGroup(group.id));
             if (group.$tab.children('.om-gbar').length) return;
             $('<span class="om-ui om-gbar">')
                 .attr('data-gid', group.id)
-                .append(PlaylistView.button('lockGroup', 'om-g1', t('groupLockHint'), PlaylistView.lock(true)))
-                .append(PlaylistView.button('unlockGroup', 'om-g0', t('groupUnlockHint'), PlaylistView.lock(false)))
-                .append(PlaylistView.button('noChannel', 'om-gepg', t('groupNoChannelHint'), LibraryIcon.img(NO_CHANNEL)))
+                .append(PlaylistView.button('groupMenu', 'om-gmenu', t('groupMenuHint'), '&#8942;'))
                 .appendTo(group.$tab);
         }
 
@@ -1696,7 +2176,7 @@
 
         async moveToChosenGroup($row, groupId) {
             const group = this.page.groupById(groupId);
-            if (group) await this.handlers.moveTo($row, group);
+            if (group) await this.whileWorking($row, this.handlers.moveTo($row, group));
             this.redrawRow($row);
         }
 
@@ -1704,7 +2184,7 @@
             const $row = this.page.rowById(channel.uuid);
             if ('adult' in wanted) PlaylistPage.markAdult($row, wanted.adult === '1');
             if ('libchannel_id' in wanted) PlaylistPage.markBinding($row, wanted.libchannel_id);
-            if (written.includes('group_id')) $row.remove();
+            if (written.includes('group_id')) PlaylistPage.moveRowTo($row, wanted.group_id);
         }
 
         updateHeader() {
@@ -1760,19 +2240,31 @@
             this.close();
             this.channel = channel;
             this.$modal = $(LibraryPicker.markup(channel.title)).appendTo('body');
-            this.$query = this.$modal.find('.om-q').val(LibraryPicker.initialQuery(channel.title));
+            this.$query = this.$modal.find('.om-q').val(ChannelTitle.startPhrase(channel.title));
             this.$hint = this.$modal.find('.om-hint');
+            this.$current = this.$modal.find('.om-current');
             this.$list = this.$modal.find('.om-list');
             this.attachEventHandlers();
+            this.showCurrentBinding();
             this.showResults();
             this.showHint();
-            this.requestMissingProbes(channel.title);
+            this.requestMissingProbes(this.$query.val());
             setTimeout(() => this.$query.trigger('focus').select(), 30);
         }
 
-        static initialQuery(title) {
-            const words = ChannelTitle.words(title);
-            return (words.length > 1 ? words.slice(0, -1) : words).join(' ');
+        showCurrentBinding() {
+            const id = this.channel.libId || '';
+            const $label = $('<span class="om-cur-l">').text(t('currentBinding'));
+            if (!id) {
+                this.$current.empty().append($label, $('<span class="om-nm">').text(t('currentUnbound')));
+                return;
+            }
+            this.$current.empty().append($label, LibraryIcon.img(id),
+                $('<span class="om-nm">').text(this.bindingNameOf(id)), $('<span class="om-eid">').text(`#${id}`));
+        }
+
+        bindingNameOf(id) {
+            return id === NO_CHANNEL ? t('noChannelName') : this.library.nameOf(id);
         }
 
         attachEventHandlers() {
@@ -1841,18 +2333,19 @@
             this.$list.empty();
             if (notes.length) this.$list.append($('<div class="om-relax">').text(notes.join('. ')));
             if (entries.length) {
-                this.$list.append(entries.map(LibraryPicker.resultOf));
+                this.$list.append(entries.map(entry => LibraryPicker.resultOf(entry, this.channel.libId)));
             } else {
                 this.$list.append($('<div class="om-empty">').text(emptyText));
             }
         }
 
-        static resultOf(entry) {
-            return $('<div class="om-it">')
+        static resultOf(entry, currentId) {
+            const $result = $('<div class="om-it">')
                 .attr({ 'data-id': entry.id, 'data-name': entry.name })
                 .append(LibraryIcon.img(entry.id))
-                .append($('<span class="om-nm">').text(entry.name || `#${entry.id}`))
-                .append($('<span class="om-eid">').text(entry.id));
+                .append($('<span class="om-nm">').text(entry.name || `#${entry.id}`));
+            if (entry.id === currentId) $result.addClass('om-cur').append($('<span class="om-check">').text('✓'));
+            return $result.append($('<span class="om-eid">').text(entry.id));
         }
 
         async requestMissingProbes(text) {
@@ -1860,17 +2353,18 @@
             if (!probes.length) return;
             const $hint = this.$hint;
             probes.forEach(probe => this.inflight.add(probe));
-            $hint.text(t('requesting', { probes: probes.join(', ') }));
+            $hint.addClass('om-spin').text(t('requesting', { probes: probes.join(', ') }));
             await this.library.collect(probes);
             probes.forEach(probe => this.inflight.delete(probe));
             if (!this.isOpen()) return;
             this.showResults();
-            if (this.$hint === $hint) this.showHint(probes);
+            this.showCurrentBinding();
+            this.showHint(this.$hint === $hint ? probes : []);
         }
 
         showHint(addedFrom = []) {
             const hint = t('pickerHint', { library: this.library.size, probes: this.library.probeCount });
-            this.$hint.text(addedFrom.length ? `${hint} · ${t('pickerHintAdded', { probes: addedFrom.join(', ') })}` : hint);
+            this.$hint.toggleClass('om-spin', this.inflight.size > 0).text(addedFrom.length ? `${hint} · ${t('pickerHintAdded', { probes: addedFrom.join(', ') })}` : hint);
         }
 
         static markup(title) {
@@ -1884,7 +2378,127 @@
                             <button type="button" class="om-b om-close" title="${escapeHtml(t('close'))}">&#10005;</button>
                         </div>
                         <div class="om-hint"></div>
+                        <div class="om-current"></div>
                         <div class="om-list"></div>
+                    </div>
+                </div>`;
+        }
+    }
+
+    class DissolveDialog {
+        constructor(onStop) {
+            this.onStop = onStop;
+            this.$root = null;
+            this.$target = null;
+            this.$go = null;
+            this.$cancel = null;
+            this.modal = null;
+            this.opening = null;
+            this.running = false;
+            this.from = null;
+            this.targets = [];
+            this.count = 0;
+            this.settle = () => null;
+        }
+
+        static uikitAvailable() {
+            const uikit = pageWindow.UIkit;
+            return Boolean(uikit && uikit.modal);
+        }
+
+        /** resolves with the chosen group, or with null once the dialog closes without one */
+        ask(from, targets, count) {
+            this.close();
+            Object.assign(this, { from, targets, count, running: false });
+            this.$root = $(DissolveDialog.markup()).appendTo('body');
+            this.$root.find('.uk-modal-title').text(t('dissolveTitle', { group: from.title }));
+            this.$target = this.$root.find('.om-target')
+                .append($('<option value="">').text(t('moveTo')), targets.map(group => $('<option>').val(group.id).text(group.title)))
+                .on('change', () => this.showCount());
+            this.$go = this.$root.find('.om-go').on('click', () => this.settle(this.chosenTarget()));
+            this.$cancel = this.$root.find('.om-cancel').on('click', () => this.cancelOrStop());
+            this.showCount();
+            const answer = new Promise(resolve => {
+                this.settle = resolve;
+            });
+            this.show();
+            return answer;
+        }
+
+        chosenTarget() {
+            return this.targets.find(group => group.id === this.$target.val()) || null;
+        }
+
+        showCount() {
+            const to = this.chosenTarget();
+            const params = { count: this.count, from: this.from.title, to: to && to.title };
+            this.$root.find('.om-count').text(t(to ? 'dissolveCount' : 'dissolveChoose', params));
+            this.$go.prop('disabled', !to).text(t('dissolveConfirm', params));
+        }
+
+        showProgress(done, total) {
+            if (!this.$root) return;
+            this.running = true;
+            this.$target.prop('disabled', true);
+            this.$go.prop('hidden', true);
+            this.$cancel.text(t('stop'));
+            this.$root.find('progress').prop('hidden', false).attr({ value: done, max: total });
+            this.$root.find('.om-count').addClass('om-spin').text(`${done} / ${total}`);
+        }
+
+        cancelOrStop() {
+            if (this.running) {
+                this.onStop();
+            } else {
+                this.close();
+            }
+        }
+
+        /** uikit3.min.css keeps a .uk-modal and its dialog invisible until .uk-open; a UIkit modal closes on Esc and outside clicks unless told not to */
+        show() {
+            if (!DissolveDialog.uikitAvailable()) {
+                this.$root.addClass('om-modal uk-open').children().addClass('om-dlg om-small');
+                return;
+            }
+            const $root = this.$root;
+            $root.on('hidden', event => event.target === event.currentTarget && this.discard($root));
+            this.modal = pageWindow.UIkit.modal($root[0], { escClose: false, bgClose: false });
+            this.opening = this.modal.show();
+        }
+
+        /** UIkit opens a modal in the next animation frame, and a hide() before that frame does nothing */
+        close() {
+            this.settle(null);
+            if (this.modal) {
+                const modal = this.modal;
+                this.opening.catch(() => null).then(() => modal.hide());
+            } else if (this.$root) {
+                this.discard(this.$root);
+            }
+        }
+
+        /** a UIkit modal is removed only once hidden, or the page keeps its scroll lock */
+        discard($root) {
+            $root.remove();
+            if (this.$root !== $root) return;
+            this.settle(null);
+            Object.assign(this, { $root: null, modal: null, opening: null, running: false });
+        }
+
+        static markup() {
+            return `
+                <div class="om-ui uk-modal om-dissolve">
+                    <div class="uk-modal-dialog uk-modal-body">
+                        <h2 class="uk-modal-title"></h2>
+                        <label>${escapeHtml(t('dissolveTarget'))}
+                            <select class="uk-select om-target"></select>
+                        </label>
+                        <p class="om-count"></p>
+                        <progress class="uk-progress" value="0" max="1" hidden></progress>
+                        <p class="uk-text-right">
+                            <button type="button" class="uk-button uk-button-default om-cancel">${escapeHtml(t('cancel'))}</button>
+                            <button type="button" class="uk-button uk-button-primary om-go"></button>
+                        </p>
                     </div>
                 </div>`;
         }
@@ -1905,22 +2519,58 @@
         }
 
         replayDecision(channel, decision) {
-            return this.alignChannel(channel, decision, current => this.decisions.fileUnderCode(current, decision));
+            return this.alignChannel(channel, this.withoutLeavingFavourite(channel, decision), current => this.decisions.fileUnderCode(current, decision));
+        }
+
+        /** a page-open lock comes before anyone chose a profile, so it writes and remembers nothing */
+        enforce(channel, patch) {
+            return this.alignChannel(channel, patch, () => null);
+        }
+
+        /** a remembered group never takes a row out of the favourite group: a copy whose original was deleted has no namesake left to show it is one */
+        withoutLeavingFavourite(channel, decision) {
+            const staysInFavourite = decision.group && this.page.isInGroup(channel.uuid, this.decisions.favouriteGroupId());
+            return staysInFavourite ? Object.assign({}, decision, { group: '' }) : decision;
+        }
+
+        /** the site binds a new channel by its title and never updates a copy's address: a copy is set to its original's, none included */
+        mirrorOnto(copy, form) {
+            const wanted = { href: form.href, libchannel_id: form.libchannel_id || '', adult: Decisions.adultValue(form.adult === '1') };
+            return this.writeAndShow(copy, wanted, {}, () => null);
         }
 
         /** the decision is filed after the attempt, when reading the form may have taught the channel's code */
-        async alignChannel(snapshot, decision, fileDecision) {
+        alignChannel(snapshot, decision, fileDecision) {
             const channel = this.page.currentStateOf(snapshot);
+            return this.writeAndShow(channel, this.changesTo(decision, channel, this.page.groupsByTitle()), decision, fileDecision);
+        }
+
+        changesTo(decision, channel, groupsByTitle) {
+            const wanted = Decisions.changesTo(decision, channel, groupsByTitle);
+            if (wanted.group_id && this.movesAcrossFavourite(channel, wanted.group_id)) delete wanted.group_id;
+            return wanted;
+        }
+
+        /** a copy has its original's title and address, and so its original's remembered group: moves leave the favourite group alone */
+        movesAcrossFavourite(channel, groupId) {
+            const favouriteId = this.decisions.favouriteGroupId();
+            const inFavourite = this.page.isInGroup(channel.uuid, favouriteId);
+            if (!favouriteId || (!inFavourite && groupId !== favouriteId)) return false;
+            const index = FavouriteCopies.indexOf(this.page.rowTitles(), favouriteId);
+            const byTitle = inFavourite ? index.outsideByTitle : index.insideByTitle;
+            return FavouriteCopies.idsOf(byTitle, channel).length > 0;
+        }
+
+        async writeAndShow(channel, wanted, decision, fileDecision) {
             try {
-                return await this.writeDifferences(channel, decision);
+                return await this.view.whileWorking(this.page.rowById(channel.uuid), this.writeDifferences(channel, wanted, decision));
             } finally {
                 fileDecision(channel);
                 this.view.redrawRow(this.page.rowById(channel.uuid));
             }
         }
 
-        async writeDifferences(channel, decision) {
-            const wanted = Decisions.changesTo(decision, channel, this.page.groupsByTitle());
+        async writeDifferences(channel, wanted, decision) {
             if (!size(wanted)) return Step.SKIPPED;
             const written = await this.editor.write(channel, wanted);
             this.view.showSaved(channel, wanted, written);
@@ -1931,9 +2581,11 @@
 
         static describeChanges(written, wanted, decision) {
             return written.map(field => {
-                if (field === 'libchannel_id') return ` → ${[wanted.libchannel_id, decision.name].filter(Boolean).join(' ')}`;
+                if (field === 'libchannel_id') return ` → ${[wanted.libchannel_id || '—', decision.name].filter(Boolean).join(' ')}`;
                 if (field === 'adult') return wanted.adult === '1' ? ' → 18+' : ` → ${t('changeUnlocked')}`;
-                return ` → «${decision.group}»`;
+                if (field === 'href') return ` → ${t('addressUpdated')}`;
+                if (field === 'group_id') return ` → «${decision.group}»`;
+                return ` → ${field}`;
             }).join('');
         }
 
@@ -1960,7 +2612,7 @@
 
         planFor(channel, groupsByTitle) {
             const decision = this.decisions.decisionFor(channel);
-            const wanted = decision ? Decisions.changesTo(decision, channel, groupsByTitle) : {};
+            const wanted = decision ? this.changesTo(this.withoutLeavingFavourite(channel, decision), channel, groupsByTitle) : {};
             return size(wanted) ? { channel, decision, wanted } : null;
         }
 
@@ -2084,6 +2736,164 @@
         static describeClash(channel, decision, observed, fields) {
             const details = fields.map(field => t('syncClashField', { field, remembered: decision[field], actual: observed[field] }));
             return `${channel.title}: ${details.join('; ')}`;
+        }
+    }
+
+    class Favourites {
+        constructor({ site, page, decisions, editor, batch, view, panel, reconciler, playlistId }) {
+            this.site = site;
+            this.page = page;
+            this.decisions = decisions;
+            this.editor = editor;
+            this.batch = batch;
+            this.view = view;
+            this.panel = panel;
+            this.reconciler = reconciler;
+            this.playlistId = playlistId;
+        }
+
+        setGroup(group) {
+            if (!this.mayLeaveTheCopies()) return;
+            this.decisions.setFavouriteGroup(group.id);
+            this.view.redecorateAll();
+            this.panel.logAndToast(t('favouriteSet', { group: group.title }), 'ok');
+        }
+
+        clearGroup() {
+            if (!this.mayLeaveTheCopies()) return;
+            this.decisions.clearFavouriteGroup();
+            this.view.redecorateAll();
+            this.panel.logAndToast(t('favouriteCleared'), 'ok');
+        }
+
+        /** a copy is told from its original only while its group is the favourite one */
+        mayLeaveTheCopies() {
+            const favourite = this.view.favouriteGroup();
+            if (!favourite) return true;
+            const index = this.indexOf(favourite);
+            const copies = this.page.channels(this.page.groupRows(favourite.id))
+                .filter(member => FavouriteCopies.idsOf(index.outsideByTitle, member).length > 0).length;
+            return !copies || confirm(t('confirmLeaveFavourite', { group: favourite.title, count: copies }));
+        }
+
+        indexOf(favourite) {
+            return FavouriteCopies.indexOf(this.page.rowTitles(), favourite.id);
+        }
+
+        async toggleStar($row) {
+            const favourite = this.view.favouriteGroup();
+            if (!favourite) return;
+            const started = this.batch.generation;
+            await this.batch.run(t('labelFavourite'), [this.page.channel($row)], channel => this.toggleStarOf(channel, favourite, started));
+            this.view.redecorateAll();
+        }
+
+        toggleStarOf(snapshot, favourite, started) {
+            const channel = this.page.currentStateOf(snapshot);
+            const index = this.indexOf(favourite);
+            const star = FavouriteCopies.starOf(channel, index);
+            if (star === Star.OFF) return this.addCopy(channel, favourite, started);
+            if (star === Star.ON) return this.removeCopy(channel, favourite, index);
+            this.panel.log(t(FavouriteCopies.hintOf(star), { title: channel.title, group: favourite.title }), 'warn');
+            return Step.SKIPPED;
+        }
+
+        /** the site, not the page, tells whether the favourite group holds the title already; making the copy and binding it are then one step */
+        async addCopy(channel, favourite, started) {
+            const form = await this.editor.readFormAndLearnRow(channel);
+            const current = await this.site.fetchPage(location.href);
+            if (this.batch.stoppedAndReportedSince(started)) return Step.SKIPPED;
+            const members = this.page.channels(PlaylistPage.groupRowsIn(current, favourite.id));
+            if (members.some(member => member.title === channel.title)) return this.showCopyAlreadyThere(channel, favourite, current);
+            await this.site.createChannel({ playlistId: this.playlistId, groupId: favourite.id, name: form.ch_title || channel.title, href: form.href });
+            try {
+                const copy = this.newCopyOf(channel, favourite, new Set(members.map(member => member.uuid)), await this.site.fetchPage(location.href));
+                this.panel.log(`★ ${channel.title} → «${favourite.title}»`, 'ok');
+                await this.reconciler.mirrorOnto(copy, form);
+                return Step.CHANGED;
+            } catch (unfinished) {
+                this.panel.log(t('copyUnfinished', { title: channel.title, group: favourite.title }), 'warn');
+                throw unfinished;
+            } finally {
+                await this.showGroupFromSite(favourite);
+            }
+        }
+
+        showCopyAlreadyThere(channel, favourite, doc) {
+            this.showGroupFrom(doc, favourite);
+            this.panel.log(t('copyAlreadyThere', { title: channel.title, group: favourite.title }), 'warn');
+            return Step.SKIPPED;
+        }
+
+        /** a failed read leaves the page as it was, and the next star reads the site first */
+        async showGroupFromSite(group) {
+            try {
+                this.showGroupFrom(await this.site.fetchPage(location.href), group);
+            } catch (error) {
+                this.panel.logFailure(t('refreshFailed', { error: describeError(error) }), error);
+            }
+        }
+
+        /** the site answers a new channel with a redirect and no id: the copy is the one new row of that title in the fetched page */
+        newCopyOf(channel, favourite, idsBefore, doc) {
+            const created = this.page.channels(PlaylistPage.groupRowsIn(doc, favourite.id))
+                .filter(candidate => !idsBefore.has(candidate.uuid) && candidate.title === channel.title);
+            if (created.length !== 1) {
+                throw Object.assign(new Error(t('copyUnclear', { group: favourite.title, count: created.length })), { channelTitle: channel.title });
+            }
+            const { uuid, title, url } = created[0];
+            return { uuid, title, url };
+        }
+
+        showGroupFrom(doc, group) {
+            PlaylistPage.updateGroupRowsFrom(doc, group.id);
+            this.view.showKnownNoChannelRows();
+        }
+
+        async removeCopy(channel, favourite, index) {
+            const copy = this.page.channel(this.page.rowById(FavouriteCopies.copyIdOf(channel, index)));
+            const original = this.page.channel(this.page.rowById(FavouriteCopies.originalIdOf(channel, index)));
+            if (!await this.isSameStream(copy, await this.editor.readFormAndLearnRow(original))) return this.leaveOtherStream(copy, favourite);
+            await this.site.deleteChannel(copy.uuid, this.playlistId);
+            PlaylistPage.removeRow(this.page.rowById(copy.uuid));
+            this.panel.log(`☆ ${channel.title} ✕ «${favourite.title}»`, 'ok');
+            return Step.CHANGED;
+        }
+
+        /** the ch code of a stream address outlives a new token: two rows of one title with different codes are two channels */
+        async isSameStream(copy, originalForm) {
+            const originalCode = SourcePlaylist.channelCode(originalForm.href);
+            const copyCode = SourcePlaylist.channelCode((await this.editor.readFormAndLearnRow(copy)).href);
+            return !originalCode || !copyCode || originalCode === copyCode;
+        }
+
+        leaveOtherStream(copy, favourite) {
+            this.panel.log(t('otherStream', { title: copy.title, group: favourite.title }), 'warn');
+            return Step.SKIPPED;
+        }
+
+        /** a playlist update keeps a copy while its title is in the source, and never changes its address */
+        async updateCopies(favourite) {
+            if (!this.decisions.isFavouriteGroup(favourite.id)) return;
+            const index = this.indexOf(favourite);
+            const members = this.page.channels(this.page.groupRows(favourite.id));
+            const copies = members.filter(member => FavouriteCopies.starOf(member, index) === Star.ON);
+            const left = members.filter(member => !copies.includes(member));
+            if (copies.length && !confirm(t('confirmUpdateCopies', { group: favourite.title, count: copies.length }))) return;
+            if (left.length) this.panel.log(t('copiesLeft', { group: favourite.title, titles: left.map(member => `«${member.title}»`).join(', ') }), 'warn');
+            const tally = await this.batch.run(t('labelCopies'), copies, copy => this.updateCopy(copy, favourite), { summary: false });
+            this.view.redecorateAll();
+            const counts = { group: favourite.title, updated: tally[Step.CHANGED], count: copies.length, left: left.length };
+            this.panel.logAndToast(t('copiesChecked', counts), left.length ? 'warn' : 'ok');
+        }
+
+        async updateCopy(snapshot, favourite) {
+            const copy = this.page.currentStateOf(snapshot);
+            const originalId = FavouriteCopies.originalIdOf(copy, this.indexOf(favourite));
+            if (!originalId) return Step.SKIPPED;
+            const form = await this.editor.readFormAndLearnRow(this.page.channel(this.page.rowById(originalId)));
+            if (!await this.isSameStream(copy, form)) return this.leaveOtherStream(copy, favourite);
+            return this.reconciler.mirrorOnto(copy, form);
         }
     }
 
@@ -2235,10 +3045,13 @@
             this.library = new LibraryIndex(this.store, this.site);
             this.editor = new ChannelEditor(this.site, this.decisions, PLAYLIST_ID, (text, kind) => this.panel.log(text, kind));
             this.batch = new BatchRunner(this.panel);
-            this.view = new PlaylistView(this.page, this.decisions, this.library, this.panel);
-            this.picker = new LibraryPicker(this.library, this.userAction(($row, id, name) => this.bindRow($row, id, name)));
+            this.view = new PlaylistView(this.page, this.decisions, this.library, this.panel, new GroupMenu());
+            this.picker = new LibraryPicker(this.library,
+                this.userAction(($row, id, name) => this.view.whileWorking($row, this.bindRow($row, id, name))));
+            this.dissolveDialog = new DissolveDialog(() => this.batch.stop());
             const parts = { page: this.page, decisions: this.decisions, editor: this.editor, batch: this.batch, view: this.view, panel: this.panel };
             this.reconciler = new Reconciler(parts);
+            this.favourites = new Favourites(Object.assign({ site: this.site, reconciler: this.reconciler, playlistId: PLAYLIST_ID }, parts));
             this.transfer = new Transfer(Object.assign({ store: this.store, library: this.library }, parts));
             this.diagnostics = new Diagnostics(Object.assign({ site: this.site, window: pageWindow }, parts));
             this.init();
@@ -2259,10 +3072,16 @@
                 lockGroup: this.userAction(group => this.setGroupAdult(group, true)),
                 unlockGroup: this.userAction(group => this.setGroupAdult(group, false)),
                 noChannel: this.userAction(group => this.setGroupNoChannel(group)),
+                dissolveGroup: this.userAction(group => this.dissolveGroup(group)),
+                setFavourite: this.userAction(group => this.favourites.setGroup(group)),
+                clearFavourite: this.userAction(() => this.favourites.clearGroup()),
+                updateCopies: this.userAction(group => this.favourites.updateCopies(group)),
+                toggleStar: this.userAction($row => this.favourites.toggleStar($row)),
             });
             this.interceptChannelDeleteBeforeUikit();
             this.mergeWhenAnotherTabSaves();
             this.greet();
+            this.userAction(() => this.lockAdultGroups())();
         }
 
         panelActions() {
@@ -2303,6 +3122,12 @@
             const decisions = size(this.decisions.byTitle());
             this.panel.log(t('ready', { profile: name, reason: t(reason), decisions }));
             if (!decisions) this.reconciler.hintOtherProfiles();
+            this.reportMissingPageWidgets();
+        }
+
+        reportMissingPageWidgets() {
+            if (!GroupMenu.widgetAvailable()) this.panel.log(t('jqueryUiMissing'), 'warn');
+            if (!DissolveDialog.uikitAvailable()) this.panel.log(t('uikitMissing'), 'warn');
         }
 
         toggleAdult($row) {
@@ -2319,6 +3144,18 @@
             if (!confirm(t(lock ? 'confirmLockGroup' : 'confirmUnlockGroup', { group: group.title }))) return;
             const channels = await this.channelsOfGroup(group);
             if (channels) await this.setAdult(channels, lock);
+        }
+
+        /** a playlist update recreates a channel renamed at its source without 18+, and only its result shows here */
+        async lockAdultGroups() {
+            const unlocked = this.page.groups()
+                .filter(group => ADULT_GROUP.test(group.title))
+                .flatMap(group => this.page.channels(this.page.groupRows(group.id)))
+                .filter(channel => !channel.adult && (this.decisions.decisionFor(channel) || {}).adult !== Decisions.adultValue(false));
+            if (!unlocked.length) return;
+            const decision = { adult: Decisions.adultValue(true) };
+            const tally = await this.batch.run('18+', unlocked, channel => this.reconciler.enforce(channel, decision), { summary: false });
+            if (tally[Step.CHANGED]) this.panel.logAndToast(t('adultGroupsLocked', { count: tally[Step.CHANGED] }), 'ok');
         }
 
         async setGroupNoChannel(group) {
@@ -2344,14 +3181,53 @@
             return null;
         }
 
+        async dissolveGroup(group) {
+            if (this.decisions.isFavouriteGroup(group.id)) return;
+            const channels = await this.channelsOfGroup(group);
+            if (!channels) return;
+            if (!channels.length) {
+                this.panel.log(t('groupEmpty', { group: group.title }), 'warn');
+                return;
+            }
+            const targets = this.page.groups().filter(other => other.id !== group.id);
+            const target = await this.dissolveDialog.ask(group, targets, channels.length);
+            if (!target) return;
+            try {
+                const moved = await this.moveAll(channels, target);
+                this.panel.logAndToast(t('dissolveDone', { from: group.title, to: target.title, moved, total: channels.length }), 'ok');
+            } finally {
+                this.dissolveDialog.close();
+            }
+        }
+
+        async moveAll(channels, target) {
+            let done = 0;
+            this.dissolveDialog.showProgress(done, channels.length);
+            const tally = await this.batch.run(t('labelDissolve'), channels, async channel => {
+                try {
+                    return await this.moveChannel(channel, target);
+                } finally {
+                    this.dissolveDialog.showProgress(++done, channels.length);
+                }
+            }, { summary: false });
+            return tally[Step.CHANGED];
+        }
+
+        moveChannel(channel, target) {
+            if (this.reconciler.movesAcrossFavourite(channel, target.id)) {
+                this.panel.log(t('copyNotMoved', { title: channel.title }), 'warn');
+                return Step.SKIPPED;
+            }
+            return this.reconciler.makeChannelMatch(channel, { group: target.title });
+        }
+
         bindRow($row, id, name) {
             const decision = { epg_id: id, name: name || '' };
             return this.batch.run(t('labelBinding'), [this.page.channel($row)], channel => this.reconciler.makeChannelMatch(channel, decision));
         }
 
         moveToGroup($row, group) {
-            const decision = { group: group.title };
-            return this.batch.run(t('labelMove'), [this.page.channel($row)], channel => this.reconciler.makeChannelMatch(channel, decision));
+            return this.batch.run(t('labelMove'), [this.page.channel($row)], channel => this.moveChannel(channel, group));
         }
 
         async collectLibrary(everyLetterPair) {
@@ -2383,7 +3259,7 @@
         interceptChannelDeleteBeforeUikit() {
             document.addEventListener('click', event => {
                 const $link = $(event.target).closest(PlaylistPage.DELETE_LINK);
-                if (!$link.length || !this.takeoverEnabled()) return;
+                if (!$link.length || !this.takesOverDelete($link)) return;
                 event.preventDefault();
                 event.stopPropagation();
                 event.stopImmediatePropagation();
@@ -2391,14 +3267,19 @@
             }, true);
         }
 
+        /** @see https://ottplayer.tv/public/js/main.js .delete_ch fills the confirm link once per row at load: a row inserted later is deleted by the tool */
+        takesOverDelete($link) {
+            return this.takeoverEnabled() || PlaylistPage.isInsertedRow(this.page.rowOf($link));
+        }
+
         async deleteChannel($link) {
             const target = this.page.deleteTargetOf($link);
             if (!confirm(t('confirmDelete', { name: target.name }))) return;
             try {
                 await this.site.deleteChannel(target.channelId, target.playlistId);
-                this.page.rowOf($link).remove();
+                PlaylistPage.removeRow(this.page.rowOf($link));
                 this.panel.log(t('deleted', { name: target.name }), 'ok');
-                this.view.updateHeader();
+                this.view.redecorateAll();
             } catch (error) {
                 this.panel.logFailure(t('deleteFailed', { error: describeError(error) }), error);
             }
@@ -2413,9 +3294,11 @@
                 this.panel.log(t('refreshed'));
             } catch (error) {
                 this.panel.logFailure(t('refreshFailed', { error: describeError(error) }), error);
+                return;
             } finally {
                 this.panel.status('');
             }
+            await this.lockAdultGroups();
         }
 
         chooseProfile(name) {
