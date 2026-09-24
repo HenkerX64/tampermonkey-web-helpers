@@ -2,7 +2,7 @@
 // @name         OttPlayer - TV Playlist Organizer
 // @name:ru      OttPlayer - Органайзер ТВ-плейлиста
 // @namespace    https://github.com/HenkerX64
-// @version      1.1
+// @version      1.2
 // @description  Organizes an OttPlayer playlist on its edit page: library icons and EPG, 18+ locks, group moves, and a memory of every decision, so the next playlist of the same provider takes one click.
 // @description:ru  Упорядочивает плейлист OttPlayer прямо на странице редактирования: иконки и EPG из библиотеки, замки 18+, перенос по группам и память решений — следующий плейлист того же провайдера в один клик.
 // @author       HenkerX64
@@ -43,6 +43,15 @@
  *   binding. Afterwards run "Synchronize", which learns the new titles, and "Apply remembered", which puts
  *   the lock and binding back by the channel code; then "Update the copies" in the favourite group's menu,
  *   since an update never changes the address of a copy.
+ * - "Rebuild groups from the playlist" brings the groups back in line with the playlist source. A source that numbers its
+ *   groups by position ("12. UHD") renames all of them whenever it reorders them, and an update then puts only its new
+ *   channels into new groups, while the old ones stay behind. The rebuild gives each group the title the source uses now
+ *   (renaming the old group, or creating one), moves every channel into its source group, deletes the groups left empty,
+ *   puts the groups and their channels in the source order and then updates the copies of the favourite group. The
+ *   favourite group, groups you hid and «скрытые» stay exactly as they are, the favourite first and the hidden ones last.
+ *   The whole plan is written to the log and nothing is changed before you confirm it; Shift+click only shows the plan.
+ *   A channel the rebuild moves forgets a group you once chose for it by hand, so "Apply remembered" does not move it
+ *   back; its icon, EPG and 18+ lock stay remembered.
  * - A channel is deleted without reloading the page.
  * - Every decision is remembered in the browser, under the channel title and under the channel code
  *   of its stream address (…/ch123/…), which survives a rename and tells channels of the same name apart.
@@ -76,6 +85,15 @@
  *   После обновления нажмите «Синхронизировать» — он узнает новые названия — и «Применить запомненное»,
  *   которое вернёт замок и привязку по коду канала, а затем «Обновить копии» в меню избранной группы:
  *   обновление никогда не меняет адрес копии.
+ * - «Пересобрать группы по плейлисту» снова приводит группы в соответствие с источником плейлиста. Источник, который
+ *   нумерует группы по порядку («12. UHD»), при каждой перестановке переименовывает их все, а обновление кладёт в новые
+ *   группы только новые каналы, старые же остаются на прежнем месте. Пересборка даёт каждой группе название, которое
+ *   источник использует сейчас (переименовывает старую группу или создаёт новую), переносит каждый канал в его группу
+ *   источника, удаляет опустевшие группы, расставляет группы и их каналы по порядку источника и затем обновляет копии
+ *   избранной группы. Избранная группа, скрытые вами группы и «скрытые» остаются точно как есть: избранная первой, скрытые
+ *   последними. Весь план пишется в журнал, и ничего не меняется, пока вы его не подтвердите; Shift+клик только показывает
+ *   план. Канал, который пересборка переносит, забывает группу, выбранную для него когда-то вручную, чтобы «Применить
+ *   запомненное» не вернуло его обратно; его иконка, EPG и замок 18+ остаются запомненными.
  * - Канал удаляется без перезагрузки страницы.
  * - Каждое решение запоминается в браузере — по названию канала и по коду канала из адреса потока
  *   (…/ch123/…): код переживает переименование и различает каналы с одинаковым названием.
@@ -113,6 +131,9 @@
     const ROW = '.channel_item[id]:not(.addch)';
     const OWN_UI = '#om-panel, .om-modal, .om-ui';
     const ADULT_GROUP = /для\s+взрослых|for\s+adults/i;
+    const HIDDEN_GROUP = 'скрытые';
+    const PAINT_BEFORE_DIALOG_MS = 100;
+    const FORM_TYPE = 'application/x-www-form-urlencoded; charset=UTF-8';
 
     const translations = {
         en: {
@@ -177,6 +198,39 @@
             copyAlreadyThere: '«{title}» is in «{group}» already, so no second copy is made: the group\'s list is shown as the site has it',
             otherStream: '«{title}» in «{group}» plays another stream than the channel of the same title elsewhere: taken for no copy and left alone. If it is one, delete it with its trash link and set the star again',
             copyNotMoved: '«{title}» is not moved: the favourite group keeps exactly one copy of it',
+            rebuild: 'Rebuild groups from the playlist',
+            rebuildHint: 'group titles, groups and their order as in the playlist source, then the copies of the favourite group are updated; the favourite group, hidden groups and «скрытые» stay as they are. Shift — only show the plan',
+            planTitle: '--- plan: the playlist as its source has it, {groups} groups ---',
+            planOnly: 'that was the plan only: nothing was asked, and nothing was written to the site',
+            planNothing: 'the groups, their titles and their order are as in the source already',
+            planKept: 'kept exactly as they are: {groups}',
+            planSkipped: 'the source group «{group}» belongs to a group kept as it is (the favourite group, a hidden one or «скрытые»): it is not rebuilt, and its channels stay where they are',
+            planMoveInto: 'into {group}: {channels}',
+            planStaleKept: 'kept, since they hold channels the source does not know: {groups}',
+            rebuildCreate: 'create groups: {count}',
+            rebuildMove: 'move channels into their source group: {count}',
+            rebuildDelete: 'delete groups once they are empty: {count}',
+            rebuildRename: 'rename groups: {count}',
+            rebuildSortGroups: 'put the groups in the source order: {count}',
+            rebuildSortChannels: 'put the channels in the source order, in groups: {count}',
+            rebuildUnplaced: 'channels without one source group, left where they are: {count}',
+            rebuildCopies: 'then update the copies in «{group}»: {count}',
+            confirmRebuild: 'Rebuild the groups as in the playlist source? The whole plan is in the organizer\'s log.',
+            labelNewGroups: 'new groups',
+            labelRename: 'renaming',
+            labelDeleteGroups: 'deleting groups',
+            labelOrder: 'order',
+            rebuildSourceFailed: 'the source did not load ({error}): nothing was changed',
+            rebuildNoGroups: 'the source names no groups: nothing to rebuild',
+            rebuildPageFailed: 'the playlist could not be read from the site ({error}): nothing was changed',
+            rebuildNoRows: 'the site showed the playlist without channels: nothing was changed — try again in a moment',
+            rebuildGroupNotFound: 'one new group «{group}» was expected in the playlist, found {count}',
+            rebuildReadFailed: 'the playlist could not be read back ({error}): nothing more is moved, deleted, renamed or sorted — run the rebuild again',
+            rebuildRenameWaits: '«{from}» keeps its title for now: another «{to}» is still on the site, and the next rebuild finishes it',
+            rebuildNotReadBack: 'the playlist could not be read back after the rebuild: reload the page to see it; a new rebuild plans what is left',
+            rebuildDone: 'rebuilt as in the source: {created} groups created, {moved} channels moved, {deleted} groups deleted, {renamed} renamed, {sorted} lists sorted',
+            rebuildUnfinished: 'rebuilt in part ({created} groups created, {moved} channels moved, {deleted} groups deleted, {renamed} renamed, {sorted} lists sorted); still to do, by the next run:',
+            rebuildReload: 'reload the page before you drag channels or groups or use a group\'s own rename, hide or delete: the page connects them once, when it loads',
             dissolveTitle: 'Dissolve «{group}»',
             dissolveTarget: 'move its channels to',
             dissolveChoose: '{count} channels are in «{from}». Choose the group that takes them.',
@@ -226,6 +280,7 @@
             loadingSource: 'loading the source… Tampermonkey may ask to allow the domain',
             sourceLoaded: 'source: {channels} channels, {titles} titles, {added} new',
             sourceFailed: 'the source did not load ({error}): ch comes only from forms already read. The playlist can be loaded as an .m3u file with "Load file"',
+            sourceWithoutCodes: 'the source gives no channel a ch code: ch comes only from the forms already read',
             syncDone: 'sync: recorded {recorded}, already matching {same}, filed under ch {filed}, disagreeing {clashes}',
             syncClashHint: 'Shift+click records the playlist as it is',
             syncClashField: '{field} remembered {remembered}, playlist has {actual}',
@@ -266,11 +321,12 @@
             errorRedirected: 'the server redirected — it does not accept this address',
             errorSessionExpired: 'the session expired — log in again',
             errorFormNotFound: 'channel form not found',
-            errorSearchRedirected: 'search redirected — check that you are logged in',
+            errorAjaxRedirected: 'the site redirected the request — check that you are still logged in',
+            errorUnexpectedAnswer: 'the site answered something unexpected',
             errorSourceNoAnswer: 'the source did not answer',
             errorSourceTimeout: 'the source did not answer within 60 s',
             errorNoUpdateUrl: 'the playlist has no update_url',
-            errorNoCodesInSource: 'the source has no channels with a ch code',
+            errorNoChannelsInSource: 'the source lists no channels',
             diagTitle: '--- diagnostics ---',
             diagCounts: 'channels in the playlist {all}, in the open group {open}, groups {groups}, open «{group}»',
             diagProfile: 'profile {profile} ({reason}), decisions {byTitle} by title and {byCode} by ch',
@@ -344,6 +400,39 @@
             copyAlreadyThere: '«{title}» уже есть в «{group}», вторая копия не создаётся: список группы показан таким, какой он на сайте',
             otherStream: '«{title}» в «{group}» играет другой поток, чем канал с тем же названием вне группы: не считается копией и оставлен как есть. Если это всё же копия — удалите её корзиной и поставьте звезду заново',
             copyNotMoved: '«{title}» не перенесён: в избранной группе остаётся ровно одна его копия',
+            rebuild: 'Пересобрать группы по плейлисту',
+            rebuildHint: 'названия групп, группы и их порядок — как в источнике плейлиста, затем обновляются копии избранной группы; избранная группа, скрытые группы и «скрытые» остаются как есть. Shift — только показать план',
+            planTitle: '--- план: плейлист как в его источнике, групп: {groups} ---',
+            planOnly: 'это был только план: ничего не спрошено и ничего не записано на сайт',
+            planNothing: 'группы, их названия и порядок уже как в источнике',
+            planKept: 'остаются точно как есть: {groups}',
+            planSkipped: 'группа источника «{group}» относится к группе, которая остаётся как есть (избранная, скрытая или «скрытые»): она не пересобирается, и её каналы остаются на месте',
+            planMoveInto: 'в {group}: {channels}',
+            planStaleKept: 'остаются, потому что в них есть каналы, которых нет в источнике: {groups}',
+            rebuildCreate: 'создать групп: {count}',
+            rebuildMove: 'перенести каналов в их группу источника: {count}',
+            rebuildDelete: 'удалить групп, когда опустеют: {count}',
+            rebuildRename: 'переименовать групп: {count}',
+            rebuildSortGroups: 'расставить по порядку источника групп: {count}',
+            rebuildSortChannels: 'расставить каналы по порядку источника, групп: {count}',
+            rebuildUnplaced: 'каналов без одной группы источника, остаются на месте: {count}',
+            rebuildCopies: 'затем обновить копий в «{group}»: {count}',
+            confirmRebuild: 'Пересобрать группы по источнику плейлиста? Весь план — в журнале органайзера.',
+            labelNewGroups: 'новые группы',
+            labelRename: 'переименование',
+            labelDeleteGroups: 'удаление групп',
+            labelOrder: 'порядок',
+            rebuildSourceFailed: 'источник не загрузился ({error}): ничего не изменено',
+            rebuildNoGroups: 'в источнике нет групп: пересобирать нечего',
+            rebuildPageFailed: 'плейлист не прочитался с сайта ({error}): ничего не изменено',
+            rebuildNoRows: 'сайт показал плейлист без каналов: ничего не изменено — попробуйте ещё раз чуть позже',
+            rebuildGroupNotFound: 'в плейлисте ожидалась одна новая группа «{group}», найдено {count}',
+            rebuildReadFailed: 'плейлист не перечитался ({error}): больше ничего не переносится, не удаляется, не переименовывается и не сортируется — запустите пересборку ещё раз',
+            rebuildRenameWaits: '«{from}» пока сохраняет название: на сайте ещё есть другая «{to}», следующая пересборка это закончит',
+            rebuildNotReadBack: 'после пересборки плейлист не перечитался: перезагрузите страницу, чтобы его увидеть; новая пересборка спланирует то, что осталось',
+            rebuildDone: 'пересобрано по источнику: создано групп {created}, перенесено каналов {moved}, удалено групп {deleted}, переименовано {renamed}, отсортировано списков {sorted}',
+            rebuildUnfinished: 'пересобрано частично (создано групп {created}, перенесено каналов {moved}, удалено групп {deleted}, переименовано {renamed}, отсортировано списков {sorted}); осталось, и это сделает следующий запуск:',
+            rebuildReload: 'перезагрузите страницу, прежде чем перетаскивать каналы или группы или пользоваться собственными переименованием, скрытием и удалением группы: страница подключает их один раз, при загрузке',
             dissolveTitle: 'Размыть «{group}»',
             dissolveTarget: 'перенести её каналы в',
             dissolveChoose: 'В «{from}» каналов: {count}. Выберите группу, которая их примет.',
@@ -393,6 +482,7 @@
             loadingSource: 'загружаю источник… Tampermonkey может спросить разрешение на домен',
             sourceLoaded: 'источник: {channels} каналов, названий {titles}, новых {added}',
             sourceFailed: 'источник не загрузился ({error}): ch возьмётся только из уже прочитанных форм. Плейлист можно подложить файлом .m3u через «Загрузить файл»',
+            sourceWithoutCodes: 'в источнике ни у одного канала нет ch-кода: ch возьмётся только из уже прочитанных форм',
             syncDone: 'синхронизация: записано {recorded}, уже совпадало {same}, подшито под ch {filed}, расходится с запомненным {clashes}',
             syncClashHint: 'Shift+клик запишет плейлист как есть',
             syncClashField: '{field} запомнено {remembered}, в плейлисте {actual}',
@@ -433,11 +523,12 @@
             errorRedirected: 'сервер перенаправил запрос — этот адрес он не принимает',
             errorSessionExpired: 'сессия истекла — войдите заново',
             errorFormNotFound: 'форма канала не найдена',
-            errorSearchRedirected: 'поиск перенаправлен — проверьте, что вы вошли',
+            errorAjaxRedirected: 'сайт перенаправил запрос — проверьте, что вы ещё вошли',
+            errorUnexpectedAnswer: 'сайт ответил что-то неожиданное',
             errorSourceNoAnswer: 'источник не ответил',
             errorSourceTimeout: 'источник не ответил за 60 с',
             errorNoUpdateUrl: 'у плейлиста не задан update_url',
-            errorNoCodesInSource: 'в источнике нет каналов с ch-кодом',
+            errorNoChannelsInSource: 'в источнике нет каналов',
             diagTitle: '--- диагностика ---',
             diagCounts: 'каналов в плейлисте {all}, в открытой группе {open}, групп {groups}, открыта «{group}»',
             diagProfile: 'профиль {profile} ({reason}), решений {byTitle} по названию и {byCode} по ch',
@@ -469,7 +560,17 @@
     const maskTokens = text => String(text).replace(/token=[^&"\s]+/g, 'token=…');
     const parseJson = text => JSON.parse(text, (key, value) => (key === '__proto__' ? undefined : value));
     const dictionary = (entries = {}) => Object.assign(Object.create(null), entries);
-    const groupKey = title => String(title || '').replace(/\s+/g, ' ').trim().toLowerCase();
+    const normalSpaces = text => String(text || '').replace(/\s+/g, ' ').trim();
+    const groupKey = title => normalSpaces(title).toLowerCase();
+    const sameOrder = (list, other) => list.length === other.length && list.every((item, index) => item === other[index]);
+
+    function jsonOrNull(text) {
+        try {
+            return parseJson(text);
+        } catch (notJson) {
+            return null;
+        }
+    }
 
     const HTML_ESCAPES = { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' };
     const escapeHtml = text => String(text == null ? '' : text).replace(/[&<>"']/g, char => HTML_ESCAPES[char]);
@@ -662,6 +763,11 @@
             return copies ? Star.ON : Star.OFF;
         }
 
+        static copiesAmong(rows, favouriteId) {
+            const index = FavouriteCopies.indexOf(rows, favouriteId);
+            return rows.filter(row => row.groupId === favouriteId && FavouriteCopies.starOf(row, index) === Star.ON);
+        }
+
         static copyIdOf(channel, index) {
             return FavouriteCopies.onlyIdOf(index.insideByTitle, channel);
         }
@@ -687,7 +793,7 @@
     class SourcePlaylist {
         static async load(url) {
             const channels = SourcePlaylist.parse(await SourcePlaylist.fetchText(url));
-            if (!channels.length) throw new Error(t('errorNoCodesInSource'));
+            if (!channels.length) throw new Error(t('errorNoChannelsInSource'));
             return channels;
         }
 
@@ -705,15 +811,18 @@
             }));
         }
 
+        /** OttPlayer's documented group line is #EXTGRP after the #EXTINF it belongs to; a group-title attribute is only the fallback */
         static parse(text) {
             const channels = [];
             let pending = null;
             for (const line of String(text).split(/\r?\n/).map(raw => raw.trim())) {
                 if (line.startsWith('#EXTINF')) {
                     pending = SourcePlaylist.parseExtinf(line);
+                } else if (line.startsWith('#EXTGRP:') && pending) {
+                    pending.group = normalSpaces(line.slice('#EXTGRP:'.length));
                 } else if (line && !line.startsWith('#') && pending) {
                     const ch = SourcePlaylist.channelCode(line) || SourcePlaylist.channelCode(pending.tvgId);
-                    if (ch) channels.push({ title: pending.title, ch });
+                    channels.push({ title: pending.title, ch, group: pending.group });
                     pending = null;
                 }
             }
@@ -722,12 +831,306 @@
 
         static parseExtinf(line) {
             const match = line.match(/^#EXTINF:((?:[^",]|"[^"]*")*),(.*)$/);
-            return match ? { title: match[2].trim(), tvgId: (match[1].match(/\btvg-id="([^"]*)"/) || [])[1] } : null;
+            if (!match) return null;
+            const attribute = name => (match[1].match(new RegExp(`\\b${name}="([^"]*)"`)) || [])[1];
+            return { title: normalSpaces(match[2]), tvgId: attribute('tvg-id'), group: normalSpaces(attribute('group-title')) };
+        }
+
+        /** two source titles the import writes alike («5. A/B», «5 AB») land in one group of the site */
+        static groupsInSourceOrder(channels) {
+            const groups = new Map();
+            channels.filter(channel => channel.group).forEach(channel => {
+                const key = GroupTitle.asImported(channel.group);
+                if (!groups.has(key)) groups.set(key, { title: channel.group, channels: [] });
+                groups.get(key).channels.push({ title: channel.title, ch: channel.ch });
+            });
+            return [...groups.values()];
         }
 
         static channelCode(text) {
             const match = String(text || '').match(/(?:^|\/)ch0*(\d+)(?:\/|$)/i);
             return match ? `ch${match[1]}` : null;
+        }
+    }
+
+    class GroupTitle {
+        /** the site's import names the source group «1. Federal/Федеральные» «1 FederalФедеральные»: the dot after the number and every slash go */
+        static asImported(sourceTitle) {
+            return normalSpaces(String(sourceTitle || '').replace(/^\s*(\d+)\./, '$1').replace(/\//g, ''));
+        }
+
+        /** a source that numbers its groups by position renumbers them when it reorders them: «12 UHD» and «16. UHD» are one group */
+        static haveSameBase(title, other) {
+            const base = GroupTitle.baseKeyOf(title);
+            return Boolean(base) && base === GroupTitle.baseKeyOf(other);
+        }
+
+        static baseKeyOf(title) {
+            return normalSpaces(title).replace(/^\d+\.?\s+/, '').toLowerCase().replace(/[^\p{L}\p{N}]+/gu, '');
+        }
+
+        /** every import creates this group, and the player shows none of its channels */
+        static isHiddenChannelsGroup(title) {
+            return groupKey(title) === HIDDEN_GROUP;
+        }
+    }
+
+    class RebuildPlan {
+        static of(snapshot) {
+            const { kept, keptIds, pinned, skipped, candidates } = RebuildPlan.scopeOf(snapshot);
+            const { groups, rows } = snapshot;
+            const movable = rows.filter(row => !keptIds.has(row.groupId));
+            const slots = RebuildPlan.slotsOf(snapshot.sourceGroups, skipped);
+            const targets = RebuildPlan.targetsFor(slots.filter(slot => !slot.skipped), candidates, movable, RebuildPlan.placesOf(slots));
+            const places = RebuildPlan.placesOf(targets.concat(slots.filter(slot => slot.skipped)));
+            const { moves, unplaced } = RebuildPlan.movesOf(movable, places, new Map(groups.map(group => [group.id, group.title])));
+            const { deletions, staleKept } = RebuildPlan.staleOf(candidates, targets, unplaced);
+            return RebuildPlan.frozen({
+                kept, pinned, skipped, targets, places, moves, unplaced, deletions, staleKept,
+                renames: targets.filter(target => target.renameFrom),
+                creations: targets.filter(target => !target.groupId),
+                sortsGroups: RebuildPlan.sortsGroups(groups, pinned, targets, deletions),
+                listsToSort: targets.filter(target => RebuildPlan.needsChannelSort(target, groups, rows, moves, places)),
+            });
+        }
+
+        /** rows whose exact title the source has in several groups, and whose ch code does not tell which: only their forms can */
+        static namesakesOf(snapshot) {
+            const { keptIds, skipped } = RebuildPlan.scopeOf(snapshot);
+            const places = RebuildPlan.placesOf(RebuildPlan.slotsOf(snapshot.sourceGroups, skipped));
+            return snapshot.rows.filter(row => !keptIds.has(row.groupId) && RebuildPlan.isNamesake(row, places));
+        }
+
+        /** a group hidden with the page's own control stays hidden: rebuilding its source group would show its channels in a new one */
+        static scopeOf({ sourceGroups, groups, favouriteId }) {
+            const kept = groups.filter(group => group.id === favouriteId || group.hidden || GroupTitle.isHiddenChannelsGroup(group.title));
+            const keptIds = new Set(kept.map(group => group.id));
+            const belongsToKept = sourceGroup => kept.some(group => groupKey(group.title) === groupKey(GroupTitle.asImported(sourceGroup.title))
+                || GroupTitle.haveSameBase(group.title, sourceGroup.title));
+            return {
+                kept,
+                keptIds,
+                pinned: Object.freeze({ first: Object.freeze(kept.filter(group => group.id === favouriteId)), last: Object.freeze(kept.filter(group => group.id !== favouriteId)) }),
+                skipped: sourceGroups.filter(belongsToKept),
+                candidates: groups.filter(group => !keptIds.has(group.id)),
+            };
+        }
+
+        static slotsOf(sourceGroups, skipped) {
+            return sourceGroups.map((group, sourceIndex) => ({
+                sourceIndex, title: GroupTitle.asImported(group.title), channels: group.channels, skipped: skipped.includes(group),
+            }));
+        }
+
+        static targetsFor(slots, candidates, rows, places) {
+            const taken = new Set();
+            return slots.map(slot => {
+                const group = RebuildPlan.groupHoldingMostOf(slot, candidates.filter(candidate => !taken.has(candidate.id)), rows, places);
+                if (group) taken.add(group.id);
+                return RebuildPlan.targetOf(slot, group);
+            });
+        }
+
+        static groupHoldingMostOf(slot, candidates, rows, places) {
+            const scored = candidates.filter(group => RebuildPlan.mayBecome(group, slot))
+                .map(group => ({ group, held: RebuildPlan.heldBy(group, slot, rows, places), exact: normalSpaces(group.title) === slot.title }));
+            const exactThatStays = scored.find(entry => entry.exact && RebuildPlan.holdsRowsNoTargetTakes(entry.group, rows, places));
+            const best = exactThatStays
+                || scored.reduce((most, entry) => (!most || entry.held > most.held || (entry.held === most.held && entry.exact && !most.exact) ? entry : most), null);
+            return best ? best.group : null;
+        }
+
+        static holdsRowsNoTargetTakes(group, rows, places) {
+            return rows.some(row => row.groupId === group.id && RebuildPlan.staysWhereItIs(row, places));
+        }
+
+        static staysWhereItIs(row, places) {
+            const target = RebuildPlan.targetOfRow(row, places);
+            return !target || target.skipped;
+        }
+
+        static mayBecome(group, slot) {
+            return normalSpaces(group.title) === slot.title || GroupTitle.haveSameBase(group.title, slot.title);
+        }
+
+        static heldBy(group, slot, rows, places) {
+            return rows.filter(row => row.groupId === group.id && RebuildPlan.targetOfRow(row, places) === slot).length;
+        }
+
+        static targetOf(slot, group) {
+            return Object.freeze(Object.assign({}, slot, {
+                groupId: group ? group.id : null,
+                renameFrom: group && normalSpaces(group.title) !== slot.title ? group.title : null,
+                rowCount: group ? group.rowIds.length : 0,
+            }));
+        }
+
+        static placesOf(targets) {
+            const places = { byCode: new Map(), byTitle: new Map() };
+            targets.forEach(target => target.channels.forEach((channel, sourcePosition) => {
+                const place = { target, sourcePosition, title: channel.title };
+                if (channel.ch) RebuildPlan.addTo(places.byCode, channel.ch, place);
+                RebuildPlan.addTo(places.byTitle, channel.title, place);
+            }));
+            return places;
+        }
+
+        static addTo(map, key, value) {
+            map.set(key, (map.get(key) || []).concat(value));
+        }
+
+        /** the site keeps a channel whose exact title is in the source; the ch code of its stream address tells namesakes apart */
+        static placeOf(row, places) {
+            const byCode = (row.ch && places.byCode.get(row.ch)) || [];
+            if (byCode.length) return byCode.find(place => place.title === row.title) || byCode[0];
+            const byTitle = places.byTitle.get(row.title) || [];
+            return new Set(byTitle.map(place => place.target)).size === 1 ? byTitle[0] : null;
+        }
+
+        static targetOfRow(row, places) {
+            const place = RebuildPlan.placeOf(row, places);
+            return place ? place.target : null;
+        }
+
+        static isNamesake(row, places) {
+            return !(row.ch && places.byCode.has(row.ch)) && new Set((places.byTitle.get(row.title) || []).map(place => place.target)).size > 1;
+        }
+
+        static movesOf(rows, places, groupTitles) {
+            const moves = [];
+            const unplaced = [];
+            rows.forEach(row => {
+                const place = RebuildPlan.placeOf(row, places);
+                const groupTitle = groupTitles.get(row.groupId) || '';
+                if (RebuildPlan.staysWhereItIs(row, places)) {
+                    unplaced.push({ uuid: row.uuid, title: row.title, groupId: row.groupId, groupTitle });
+                } else if (place.target.groupId !== row.groupId) {
+                    moves.push({ uuid: row.uuid, title: row.title, fromGroupId: row.groupId, fromGroupTitle: groupTitle, target: place.target, sourcePosition: place.sourcePosition });
+                }
+            });
+            moves.sort((a, b) => a.target.sourceIndex - b.target.sourceIndex || a.sourcePosition - b.sourcePosition);
+            return { moves, unplaced };
+        }
+
+        static staleOf(candidates, targets, unplaced) {
+            const targetIds = new Set(targets.map(target => target.groupId).filter(Boolean));
+            const holding = new Set(unplaced.map(row => row.groupId));
+            const stale = candidates.filter(group => !targetIds.has(group.id));
+            return { deletions: stale.filter(group => !holding.has(group.id)), staleKept: stale.filter(group => holding.has(group.id)) };
+        }
+
+        static groupOrderOf(tabIds, pinned, targetIds) {
+            const pinnedIds = new Set(pinned.first.concat(pinned.last).map(group => group.id));
+            const first = pinned.first.map(group => group.id).filter(id => tabIds.includes(id));
+            const last = pinned.last.map(group => group.id).filter(id => tabIds.includes(id));
+            const middle = targetIds.filter(id => tabIds.includes(id) && !pinnedIds.has(id));
+            return first.concat(middle, tabIds.filter(id => !pinnedIds.has(id) && !middle.includes(id)), last);
+        }
+
+        /** the site puts a new group anywhere in the list, not at its end */
+        static sortsGroups(groups, pinned, targets, deletions) {
+            if (targets.some(target => !target.groupId)) return true;
+            const deleted = new Set(deletions.map(group => group.id));
+            const current = groups.map(group => group.id).filter(id => !deleted.has(id));
+            return !sameOrder(RebuildPlan.groupOrderOf(current, pinned, targets.map(target => target.groupId)), current);
+        }
+
+        static needsChannelSort(target, groups, rows, moves, places) {
+            const byId = new Map(rows.map(row => [row.uuid, row]));
+            const current = (groups.find(group => group.id === target.groupId) || { rowIds: [] }).rowIds;
+            const leaving = new Set(moves.filter(move => move.fromGroupId === target.groupId).map(move => move.uuid));
+            const arriving = moves.filter(move => move.target === target).map(move => move.uuid);
+            const after = current.filter(uuid => !leaving.has(uuid)).concat(arriving).map(uuid => byId.get(uuid));
+            return !sameOrder(RebuildPlan.channelOrderOf(after, target, places), after.map(row => row.uuid));
+        }
+
+        static channelOrderOf(rows, target, places) {
+            const rankOf = row => (RebuildPlan.targetOfRow(row, places) === target ? RebuildPlan.placeOf(row, places).sourcePosition : Infinity);
+            return rows.map((row, listIndex) => ({ uuid: row.uuid, listIndex, rank: rankOf(row) }))
+                .sort((a, b) => (a.rank === b.rank ? a.listIndex - b.listIndex : a.rank - b.rank))
+                .map(entry => entry.uuid);
+        }
+
+        static changesNothing(plan) {
+            return !plan.creations.length && !plan.moves.length && !plan.deletions.length && !plan.renames.length && !plan.sortsGroups && !plan.listsToSort.length;
+        }
+
+        static frozen(plan) {
+            Object.values(plan).filter(Array.isArray).forEach(list => Object.freeze(list));
+            return Object.freeze(plan);
+        }
+
+        /** the site answers a new group with a redirect and no id: it is the one group the playlist did not have before */
+        static newGroupIdIn(groups, knownIds, title) {
+            const fresh = groups.filter(group => !knownIds.has(group.id));
+            const found = fresh.length === 1 ? fresh : fresh.filter(group => normalSpaces(group.title) === title);
+            if (found.length !== 1) throw new Error(t('rebuildGroupNotFound', { group: title, count: found.length }));
+            return found[0].id;
+        }
+
+        /** @see https://ottplayer.tv/public/js/playlist_page.js sortable('toArray') sends every child of a list, its header row as an empty id */
+        static orderPayload(childIds, order) {
+            const rows = new Set(order);
+            let next = 0;
+            return childIds.map(id => (rows.has(id) ? order[next++] : id));
+        }
+    }
+
+    class RebuildReport {
+        static sectionsOf(plan, copies) {
+            const names = groups => groups.map(group => `«${group.title}»`).join(', ');
+            const order = RebuildReport.orderOf(plan);
+            return [
+                ['rebuildCreate', plan.creations.length, [names(plan.creations)]],
+                ['rebuildMove', plan.moves.length, RebuildReport.moveLines(plan)],
+                ['rebuildDelete', plan.deletions.length, [names(plan.deletions)]],
+                ['rebuildRename', plan.renames.length, [plan.renames.map(RebuildReport.targetName).join(', ')]],
+                ['rebuildSortGroups', plan.sortsGroups ? order.length : 0, [names(order)]],
+                ['rebuildSortChannels', plan.listsToSort.length, [names(plan.listsToSort)]],
+                ['rebuildUnplaced', plan.unplaced.length, [plan.unplaced.map(row => `${row.title} («${row.groupTitle}»)`).join(', ')]],
+                ['rebuildCopies', copies ? copies.count : 0, []],
+            ].filter(([, count]) => count).map(([key, count, details]) => ({ key, heading: t(key, { count, group: copies ? copies.group : '' }), details }));
+        }
+
+        static planLines(plan, copies) {
+            const lines = [[t('planTitle', { groups: plan.targets.length + plan.skipped.length })]];
+            if (plan.kept.length) lines.push([t('planKept', { groups: RebuildReport.keptNames(plan) })]);
+            plan.skipped.forEach(group => lines.push([t('planSkipped', { group: group.title }), 'warn']));
+            if (RebuildPlan.changesNothing(plan)) lines.push([t('planNothing'), 'ok']);
+            RebuildReport.sectionsOf(plan, copies).forEach(({ key, heading, details }) => {
+                const kind = key === 'rebuildUnplaced' ? 'warn' : '';
+                lines.push([heading, kind], ...details.map(detail => [`· ${detail}`, kind]));
+            });
+            if (plan.staleKept.length) lines.push([t('planStaleKept', { groups: plan.staleKept.map(group => `«${group.title}»`).join(', ') })]);
+            return lines;
+        }
+
+        static question(plan, copies) {
+            const headings = RebuildReport.sectionsOf(plan, copies).map(section => `– ${section.heading}`);
+            const kept = plan.kept.length ? [t('planKept', { groups: RebuildReport.keptNames(plan) })] : [];
+            return [t('confirmRebuild'), headings.join('\n')].concat(kept).join('\n\n');
+        }
+
+        static moveLines(plan) {
+            return plan.targets
+                .map(target => [target, plan.moves.filter(move => move.target === target)])
+                .filter(([, moves]) => moves.length)
+                .map(([target, moves]) => t('planMoveInto', {
+                    group: RebuildReport.targetName(target),
+                    channels: moves.map(move => `${move.title} («${move.fromGroupTitle}»)`).join(', '),
+                }));
+        }
+
+        static targetName(target) {
+            return target.renameFrom ? `«${target.renameFrom}» → «${target.title}»` : `«${target.title}»`;
+        }
+
+        static keptNames(plan) {
+            return plan.kept.map(group => `«${group.title}»${plan.pinned.first.includes(group) ? ' ★' : ''}`).join(', ');
+        }
+
+        static orderOf(plan) {
+            return plan.pinned.first.concat(plan.targets, plan.staleKept, plan.pinned.last);
         }
     }
 
@@ -760,12 +1163,7 @@
         }
 
         static fromJson(text) {
-            let data;
-            try {
-                data = parseJson(text);
-            } catch (notJson) {
-                return null;
-            }
+            const data = jsonOrNull(text);
             const found = {};
             (function collect(node) {
                 if (!node || typeof node !== 'object') return;
@@ -970,7 +1368,11 @@
         }
 
         codeOf(channel) {
-            return this.rowCodes()[channel.uuid] || this.uniqueCodeOfTitle(channel.title);
+            return this.rowCodeOf(channel.uuid) || this.uniqueCodeOfTitle(channel.title);
+        }
+
+        rowCodeOf(uuid) {
+            return this.rowCodes()[uuid] || null;
         }
 
         uniqueCodeOfTitle(title) {
@@ -1027,6 +1429,23 @@
             this.pinProfileToPlaylist();
         }
 
+        /** a profile only guessed for this playlist may be another provider's, whose channels share titles and ch numbers with these */
+        forgetGroupOf(channel) {
+            if (!this.isThePlaylistsOwnProfile()) return;
+            const ch = this.codeOf(channel);
+            if (ch) Decisions.clearGroupIn(this.byCode(), ch);
+            if (!this.isSharedTitle(channel.title)) Decisions.clearGroupIn(this.byTitle(), ChannelTitle.key(channel.title));
+        }
+
+        isThePlaylistsOwnProfile() {
+            return this.profile.reason === 'reasonPlaylist' || this.store.getItem(`profile:${this.playlistId}`) === this.profile.name;
+        }
+
+        /** '' rather than a deleted field: merging another tab's save would bring a deleted one back */
+        static clearGroupIn(records, key) {
+            if (records[key] && records[key].group) records[key] = Object.assign({}, records[key], { group: '' });
+        }
+
         fileUnderCode(channel, decision) {
             const ch = this.codeOf(channel);
             if (ch) this.byCode()[ch] = Object.assign({}, decision, this.byCode()[ch], { title: channel.title });
@@ -1069,7 +1488,7 @@
 
         learnSource(channels) {
             const fresh = dictionary();
-            for (const { title, ch } of channels) {
+            for (const { title, ch } of channels.filter(channel => channel.ch)) {
                 const key = ChannelTitle.key(title);
                 fresh[key] = key in fresh && fresh[key] !== ch ? SHARED_TITLE : ch;
             }
@@ -1275,10 +1694,22 @@
             return parseInertHtml(html);
         }
 
-        postForm(url, data, { asAjax = false } = {}) {
-            const headers = { 'Content-Type': 'application/x-www-form-urlencoded; charset=UTF-8' };
-            if (asAjax) headers['X-Requested-With'] = 'XMLHttpRequest';
-            return this.requestWithoutFollowingRedirects(url, { method: 'POST', headers, body: $.param(data) });
+        postForm(url, data) {
+            return this.requestWithoutFollowingRedirects(url, { method: 'POST', headers: { 'Content-Type': FORM_TYPE }, body: $.param(data) });
+        }
+
+        /** the page's own $.ajax posts carry X-Requested-With and are answered 200; without a session every editor address redirects to the login */
+        async postLikeThePage(url, data) {
+            const headers = { 'Content-Type': FORM_TYPE, 'X-Requested-With': 'XMLHttpRequest' };
+            const { response, redirected } = await this.requestWithoutFollowingRedirects(url, { method: 'POST', headers, body: $.param(data) });
+            if (redirected) throw Object.assign(new Error(t('errorAjaxRedirected')), { url: OttPlayerSite.siteUrl(url) });
+            return response.text();
+        }
+
+        /** the page's own move and order calls answer 200 with JSON {state, message or msg} whatever they did: a refusal is any state but success */
+        static throwUnlessAccepted(text) {
+            const answer = jsonOrNull(text);
+            if (!answer || answer.state !== 'success') throw new Error(String((answer && (answer.message || answer.msg)) || t('errorUnexpectedAnswer')));
         }
 
         /** the playlist page's own form#newChForm posts exactly these four fields; with the binding and 18+ fields added, one trial created nothing */
@@ -1293,9 +1724,38 @@
         }
 
         async searchLibrary(query) {
-            const { response, redirected } = await this.postForm('/ajax/libch_srch', { ch_title: query }, { asAjax: true });
-            if (redirected) throw new Error(t('errorSearchRedirected'));
-            return LibraryResponse.parse(await response.text());
+            return LibraryResponse.parse(await this.postLikeThePage('/ajax/libch_srch', { ch_title: query }));
+        }
+
+        /** the playlist page's own form#newGroupForm: its redirect names no id, and the site puts the new group anywhere in the list */
+        createGroup({ playlistId, title }) {
+            return this.postForm('/playlist/newgroup', { pl_id: playlistId, name: title });
+        }
+
+        /** @see https://ottplayer.tv/public/js/playlist_page.js a[data-action=rename_group] fills form#renameGroupForm */
+        renameGroup({ groupId, title }) {
+            return this.postForm('/playlist/rename_group', { group_id: groupId, title });
+        }
+
+        /** @see https://ottplayer.tv/public/js/playlist_page.js a[data-action=delete_group] fills form#delGrForm; a group that still holds a channel stays, with the same redirect */
+        deleteGroup({ groupId, playlistId }) {
+            return this.postForm('/playlist/delete_group', { group_id: groupId, pl_id: playlistId });
+        }
+
+        /** @see https://ottplayer.tv/public/js/playlist_page.js a row dropped on a tab: ndx is its place in the list, counted from the header row, so 1 is first */
+        async moveChannelLikeThePage({ channelId, groupId, ndx }) {
+            OttPlayerSite.throwUnlessAccepted(await this.postLikeThePage('/ajax/chng_group', { group: groupId, channel: channelId, ndx }));
+        }
+
+        /** @see https://ottplayer.tv/public/js/playlist_page.js .sortbl update posts the list's sortable('toArray') */
+        async sortChannels({ playlistId, order }) {
+            OttPlayerSite.throwUnlessAccepted(await this.postLikeThePage('/ajax/sort_channels', { channels_order: JSON.stringify(order), plid: playlistId }));
+        }
+
+        /** @see https://ottplayer.tv/public/js/playlist_page.js .gr_sort update posts the ids of #gr_box's items, grp_<group id> */
+        async sortGroups({ playlistId, groupIds }) {
+            const order = groupIds.map(id => `grp_${id}`);
+            OttPlayerSite.throwUnlessAccepted(await this.postLikeThePage('/ajax/sort_group', { plid: playlistId, group_order: JSON.stringify(order) }));
         }
     }
 
@@ -1317,7 +1777,11 @@
         }
 
         allRows() {
-            return $(`.sub_block_list ${ROW}`);
+            return PlaylistPage.allRowsIn(document);
+        }
+
+        static allRowsIn(doc) {
+            return $(doc).find(`.sub_block_list ${ROW}`);
         }
 
         /** every group's rows are in the page at once; only the open group's pane carries .uk-active */
@@ -1331,6 +1795,11 @@
 
         static groupRowsIn(doc, groupId) {
             return $(doc).find(`${PlaylistPage.groupListSelector(groupId)} ${ROW}`);
+        }
+
+        /** @see https://ottplayer.tv/public/js/playlist_page.js sortable('toArray') of a list: the id of every child, the header row's empty */
+        static childIdsIn(doc, groupId) {
+            return $(doc).find(PlaylistPage.groupListSelector(groupId)).children().map((index, child) => child.id || '').get();
         }
 
         /** @see https://ottplayer.tv/public/js/playlist_page.js a group's channel list is #gp_<group id>: its drag-and-drop appends a moved channel there */
@@ -1347,11 +1816,25 @@
         }
 
         rowTitles() {
-            return this.allRows().map((index, row) => ({ uuid: row.id, title: PlaylistPage.cachedTitleOf($(row)), groupId: PlaylistPage.groupIdOf($(row)) })).get();
+            return PlaylistPage.rowTitlesIn(document);
+        }
+
+        static rowTitlesIn(doc) {
+            return PlaylistPage.allRowsIn(doc)
+                .map((index, row) => ({ uuid: row.id, title: PlaylistPage.cachedTitleOf($(row)), groupId: PlaylistPage.groupIdOf($(row)) })).get();
         }
 
         cacheTitlesWithoutFreezing() {
-            return inSlices(this.allRows().not('[data-om-title]').toArray(), row => PlaylistPage.cacheTitleOf($(row)));
+            return PlaylistPage.cacheTitlesWithoutFreezingIn(document);
+        }
+
+        static cacheTitlesWithoutFreezingIn(doc) {
+            return inSlices(PlaylistPage.allRowsIn(doc).not('[data-om-title]').toArray(), row => PlaylistPage.cacheTitleOf($(row)));
+        }
+
+        /** a group's list exists while the group does, its header row included */
+        static isEmptyGroupIn(doc, groupId) {
+            return $(doc).find(PlaylistPage.groupListSelector(groupId)).length > 0 && !PlaylistPage.groupRowsIn(doc, groupId).length;
         }
 
         /** @see https://ottplayer.tv/public/js/main.js the page binds its own handlers to each row once at load, so kept rows stay and only new ones come in */
@@ -1479,8 +1962,12 @@
         }
 
         groups() {
+            return PlaylistPage.groupsIn(document);
+        }
+
+        static groupsIn(doc) {
             const byId = new Map();
-            $('#gr_box li.drop_inn, .gr_sort li').each((index, element) => {
+            $(doc).find('#gr_box li.drop_inn, .gr_sort li').each((index, element) => {
                 const $tab = $(element);
                 const $link = PlaylistPage.groupLinkOf($tab);
                 const id = (String($tab.attr('data-target') || $link.attr('href') || '').match(/\d+/) || [])[0];
@@ -1489,10 +1976,15 @@
                 if (byId.has(id)) {
                     byId.get(id).active = byId.get(id).active || active;
                 } else {
-                    byId.set(id, { id, $tab, $link, active, title: PlaylistPage.groupTitleOf($link) });
+                    byId.set(id, { id, $tab, $link, active, title: PlaylistPage.groupTitleOf($link), hidden: PlaylistPage.isHiddenTab($tab) });
                 }
             });
             return [...byId.values()];
+        }
+
+        /** @see https://ottplayer.tv/public/js/playlist_page.js a group's own hide link carries its state in data-state: "f" when shown, 1 taken for hidden */
+        static isHiddenTab($tab) {
+            return /^(?:1|t|true)$/i.test(String($tab.find('a[data-action="hide_group"]').first().attr('data-state') || ''));
         }
 
         static groupLinkOf($tab) {
@@ -1742,6 +2234,22 @@
                 .attr({ 'data-om-action': action, title: hint ? t(hint) : '' })
                 .text(t(action))
                 .on('click', run);
+        }
+
+        static async runAloneWithSpinner($button, work) {
+            if ($button.hasClass('om-spin')) return;
+            $button.addClass('om-spin');
+            try {
+                await work();
+            } finally {
+                $button.removeClass('om-spin');
+            }
+        }
+
+        /** a dialog opened in the same task as new log lines covers them before the browser has painted them */
+        static async confirmAfterLog(question) {
+            await sleep(PAINT_BEFORE_DIALOG_MS);
+            return confirm(question);
         }
 
         log(text, kind = '') {
@@ -2070,6 +2578,13 @@
         redecorateAll() {
             this.dropBarsOfClosedGroups();
             this.decorate(this.page.openGroupRows());
+        }
+
+        /** the page binds its handlers to rows, tabs and drag and drop once at load: replaced lists carry none of them until a reload */
+        replaceListsAndRedecorate(doc) {
+            PlaylistPage.replaceListsFrom(doc);
+            this.showKnownNoChannelRows();
+            this.redecorateAll();
         }
 
         dropBarsOfClosedGroups() {
@@ -2639,8 +3154,12 @@
             }
         }
 
-        async resolveNamesakes(channels) {
-            const namesakes = channels.filter(channel => !this.decisions.codeOf(channel) && this.decisions.isSharedTitle(channel.title));
+        resolveNamesakes(channels) {
+            return this.readFormsAndLearnCodes(channels.filter(channel => !this.decisions.codeOf(channel) && this.decisions.isSharedTitle(channel.title)));
+        }
+
+        /** channels of one title are told apart only by the ch code of each one's stream address, which their forms carry */
+        async readFormsAndLearnCodes(namesakes) {
             if (!namesakes.length) return;
             this.panel.log(t('readingNamesakes', { count: namesakes.length }));
             await this.batch.run('ch', namesakes, async channel => {
@@ -2651,7 +3170,7 @@
 
         async synchronize(playlistWins) {
             const started = this.batch.generation;
-            await this.loadSource();
+            await this.loadAndLearnSource();
             if (this.batch.stoppedAndReportedSince(started)) return;
             const channels = this.page.channels(this.page.allRows());
             if (!channels.length) {
@@ -2674,17 +3193,22 @@
             this.view.redecorateAll();
         }
 
-        async loadSource() {
-            const url = PlaylistPage.updateUrl();
-            if (!url) {
-                this.panel.log(t('sourceFailed', { error: t('errorNoUpdateUrl') }), 'warn');
-                return;
-            }
-            this.panel.status(t('loadingSource'));
+        async loadAndLearnSource() {
             try {
-                this.panel.log(t('sourceLoaded', this.decisions.learnSource(await SourcePlaylist.load(url))));
+                const learned = this.decisions.learnSource(await this.loadSourceChannels());
+                this.panel.log(t('sourceLoaded', learned));
+                if (!learned.titles) this.panel.log(t('sourceWithoutCodes'), 'warn');
             } catch (error) {
                 this.panel.log(t('sourceFailed', { error: describeError(error) }), 'warn');
+            }
+        }
+
+        async loadSourceChannels() {
+            const url = PlaylistPage.updateUrl();
+            if (!url) throw new Error(t('errorNoUpdateUrl'));
+            this.panel.status(t('loadingSource'));
+            try {
+                return await SourcePlaylist.load(url);
             } finally {
                 this.panel.status('');
             }
@@ -2872,19 +3396,31 @@
             return Step.SKIPPED;
         }
 
-        /** a playlist update keeps a copy while its title is in the source, and never changes its address */
         async updateCopies(favourite) {
             if (!this.decisions.isFavouriteGroup(favourite.id)) return;
-            const index = this.indexOf(favourite);
+            const count = this.copiesIn(favourite).copies.length;
+            if (count && !confirm(t('confirmUpdateCopies', { group: favourite.title, count }))) return;
+            this.panel.logAndToast(...Favourites.copiesLineOf(await this.updateCopiesWithoutAsking(favourite)));
+        }
+
+        static copiesLineOf(counts) {
+            return [t('copiesChecked', counts), counts.left ? 'warn' : 'ok'];
+        }
+
+        copiesIn(favourite) {
+            const copyIds = new Set(FavouriteCopies.copiesAmong(this.page.rowTitles(), favourite.id).map(row => row.uuid));
             const members = this.page.channels(this.page.groupRows(favourite.id));
-            const copies = members.filter(member => FavouriteCopies.starOf(member, index) === Star.ON);
-            const left = members.filter(member => !copies.includes(member));
-            if (copies.length && !confirm(t('confirmUpdateCopies', { group: favourite.title, count: copies.length }))) return;
+            const copies = members.filter(member => copyIds.has(member.uuid));
+            return { copies, left: members.filter(member => !copies.includes(member)) };
+        }
+
+        /** a playlist update keeps a copy while its title is in the source, and never changes its address */
+        async updateCopiesWithoutAsking(favourite) {
+            const { copies, left } = this.copiesIn(favourite);
             if (left.length) this.panel.log(t('copiesLeft', { group: favourite.title, titles: left.map(member => `«${member.title}»`).join(', ') }), 'warn');
             const tally = await this.batch.run(t('labelCopies'), copies, copy => this.updateCopy(copy, favourite), { summary: false });
             this.view.redecorateAll();
-            const counts = { group: favourite.title, updated: tally[Step.CHANGED], count: copies.length, left: left.length };
-            this.panel.logAndToast(t('copiesChecked', counts), left.length ? 'warn' : 'ok');
+            return { group: favourite.title, updated: tally[Step.CHANGED], count: copies.length, left: left.length };
         }
 
         async updateCopy(snapshot, favourite) {
@@ -2894,6 +3430,247 @@
             const form = await this.editor.readFormAndLearnRow(this.page.channel(this.page.rowById(originalId)));
             if (!await this.isSameStream(copy, form)) return this.leaveOtherStream(copy, favourite);
             return this.reconciler.mirrorOnto(copy, form);
+        }
+    }
+
+    class GroupRebuild {
+        constructor({ site, page, decisions, batch, view, panel, reconciler, favourites, playlistId }) {
+            this.site = site;
+            this.page = page;
+            this.decisions = decisions;
+            this.batch = batch;
+            this.view = view;
+            this.panel = panel;
+            this.reconciler = reconciler;
+            this.favourites = favourites;
+            this.playlistId = playlistId;
+        }
+
+        async showPlan() {
+            if (await this.planFromSiteAndSource(this.batch.generation)) this.panel.log(t('planOnly'), 'ok');
+        }
+
+        async run() {
+            const started = this.batch.generation;
+            const planned = await this.planFromSiteAndSource(started);
+            if (!planned || !planned.work || !await this.askUnlessStopped(planned, started)) return;
+            const summary = RebuildPlan.changesNothing(planned.plan) ? null : await this.carryOutAndReadBack(planned, started);
+            const copies = planned.copies && !this.batch.stoppedAndReportedSince(started) ? await this.favourites.updateCopiesWithoutAsking(planned.favourite) : null;
+            this.reportEnd(summary, copies);
+        }
+
+        async askUnlessStopped(planned, started) {
+            if (this.batch.stoppedAndReportedSince(started)) return false;
+            const confirmed = await Panel.confirmAfterLog(RebuildReport.question(planned.plan, planned.copies));
+            return confirmed && !this.batch.stoppedAndReportedSince(started);
+        }
+
+        /** the page on screen can lag the site, so the plan starts from the playlist as the site has it now */
+        async planFromSiteAndSource(started) {
+            const sourceGroups = await this.loadSourceGroups();
+            const doc = sourceGroups && !this.batch.stoppedAndReportedSince(started) ? await this.readSite('rebuildPageFailed') : null;
+            if (!doc || this.batch.stoppedAndReportedSince(started)) return null;
+            if (!PlaylistPage.allRowsIn(doc).length) {
+                this.panel.log(t('rebuildNoRows'), 'warn');
+                return null;
+            }
+            const favourite = PlaylistPage.groupsIn(doc).find(group => group.id === this.decisions.favouriteGroupId()) || null;
+            await this.readFormsOfNamesakes(doc, sourceGroups, favourite);
+            if (this.batch.stoppedAndReportedSince(started)) return null;
+            const snapshot = this.snapshotOf(doc, sourceGroups, favourite);
+            const plan = RebuildPlan.of(snapshot);
+            const count = favourite ? FavouriteCopies.copiesAmong(snapshot.rows, favourite.id).length : 0;
+            const copies = count ? { group: favourite.title, count } : null;
+            RebuildReport.planLines(plan, copies).forEach(([text, kind]) => this.panel.log(text, kind));
+            const knownGroupIds = snapshot.groups.map(group => group.id);
+            return { plan, sourceGroups, favourite, copies, knownGroupIds, work: Boolean(copies) || !RebuildPlan.changesNothing(plan) };
+        }
+
+        async loadSourceGroups() {
+            try {
+                const groups = SourcePlaylist.groupsInSourceOrder(await this.reconciler.loadSourceChannels());
+                if (!groups.length) this.panel.log(t('rebuildNoGroups'), 'warn');
+                return groups.length ? groups : null;
+            } catch (error) {
+                this.panel.log(t('rebuildSourceFailed', { error: describeError(error) }), 'warn');
+                return null;
+            }
+        }
+
+        readFormsOfNamesakes(doc, sourceGroups, favourite) {
+            const namesakes = new Set(RebuildPlan.namesakesOf(this.snapshotOf(doc, sourceGroups, favourite)).map(row => row.uuid));
+            return this.reconciler.readFormsAndLearnCodes(this.page.channels(PlaylistPage.allRowsIn(doc).filter((index, row) => namesakes.has(row.id))));
+        }
+
+        snapshotOf(doc, sourceGroups, favourite) {
+            const rows = this.rowsWithCodesIn(doc);
+            const groups = PlaylistPage.groupsIn(doc).map(group => ({
+                id: group.id,
+                title: group.title,
+                hidden: group.hidden,
+                rowIds: rows.filter(row => row.groupId === group.id).map(row => row.uuid),
+            }));
+            return { sourceGroups, groups, rows, favouriteId: favourite ? favourite.id : null };
+        }
+
+        rowsWithCodesIn(doc) {
+            return PlaylistPage.rowTitlesIn(doc).map(row => Object.assign({ ch: this.decisions.rowCodeOf(row.uuid) }, row));
+        }
+
+        async carryOutAndReadBack({ plan, sourceGroups, favourite, knownGroupIds }, started) {
+            const done = await this.carryOut(plan, knownGroupIds, started);
+            const doc = await this.readSite('refreshFailed');
+            if (!doc) return { text: t('rebuildNotReadBack'), kind: 'warn', details: [] };
+            this.view.replaceListsAndRedecorate(doc);
+            const rest = RebuildPlan.of(this.snapshotOf(doc, sourceGroups, favourite));
+            if (RebuildPlan.changesNothing(rest)) return { text: t('rebuildDone', done), kind: 'ok', details: [] };
+            const toDo = RebuildReport.sectionsOf(rest, null).filter(section => section.key !== 'rebuildUnplaced');
+            return { text: t('rebuildUnfinished', done), kind: 'warn', details: toDo.map(section => `– ${section.heading}`) };
+        }
+
+        async carryOut(plan, knownGroupIds, started) {
+            const created = await this.createGroupsAndFindTheirIds(plan.creations, knownGroupIds);
+            const groupIds = new Map(plan.targets.map(target => [target, target.groupId || created.get(target) || null]));
+            const done = { created: created.size, moved: 0, deleted: 0, renamed: 0, sorted: 0 };
+            const before = this.batch.stoppedAndReportedSince(started) ? null : await this.readSite('rebuildReadFailed');
+            if (!before || this.batch.stoppedAndReportedSince(started)) return done;
+            done.moved = await this.moveChannels(before, plan.moves, groupIds);
+            if (this.batch.stoppedAndReportedSince(started)) return done;
+            return Object.assign(done, await this.deleteRenameAndSort(plan, groupIds, started));
+        }
+
+        async createGroupsAndFindTheirIds(targets, knownGroupIds) {
+            const ids = new Map();
+            const known = new Set(knownGroupIds);
+            await this.batch.run(t('labelNewGroups'), targets, async target => {
+                const id = await this.createGroupAndFindIt(target.title, known).catch(GroupRebuild.rethrowAbout(`«${target.title}»`));
+                known.add(id);
+                ids.set(target, id);
+                this.panel.log(`+ «${target.title}»`, 'ok');
+                return Step.CHANGED;
+            }, { summary: false });
+            return ids;
+        }
+
+        async createGroupAndFindIt(title, known) {
+            await this.site.createGroup({ playlistId: this.playlistId, title });
+            return RebuildPlan.newGroupIdIn(PlaylistPage.groupsIn(await this.site.fetchPage(location.href)), known, title);
+        }
+
+        /** the playlist may have changed since the plan: a row that is no longer where the plan saw it is left where it is */
+        async moveChannels(doc, moves, groupIds) {
+            const groupOfRow = new Map(PlaylistPage.rowTitlesIn(doc).map(row => [row.uuid, row.groupId]));
+            const arrived = new Map();
+            const tally = await this.batch.run(t('labelMove'), moves, async move => {
+                const groupId = groupIds.get(move.target);
+                if (!groupId || groupOfRow.get(move.uuid) !== move.fromGroupId) return Step.SKIPPED;
+                const ndx = move.target.rowCount + (arrived.get(move.target) || 0) + 1;
+                await this.site.moveChannelLikeThePage({ channelId: move.uuid, groupId, ndx }).catch(GroupRebuild.rethrowAbout(move.title));
+                arrived.set(move.target, (arrived.get(move.target) || 0) + 1);
+                this.decisions.forgetGroupOf(move);
+                return Step.CHANGED;
+            }, { summary: false });
+            return tally[Step.CHANGED];
+        }
+
+        /** the site keeps a group that still holds a channel, with the same answer as a deletion: only a group empty on the site is deleted */
+        async deleteRenameAndSort(plan, groupIds, started) {
+            const done = { deleted: 0, renamed: 0, sorted: 0 };
+            let doc = await this.readSite('rebuildReadFailed');
+            const empty = doc ? plan.deletions.filter(group => PlaylistPage.isEmptyGroupIn(doc, group.id)) : [];
+            if (empty.length && !this.batch.stoppedAndReportedSince(started)) {
+                done.deleted = await this.deleteGroups(empty);
+                doc = this.batch.stoppedAndReportedSince(started) ? null : await this.readSite('rebuildReadFailed');
+            }
+            if (!doc || this.batch.stoppedAndReportedSince(started)) return done;
+            done.renamed = await this.renameGroups(doc, plan.renames);
+            if (this.batch.stoppedAndReportedSince(started)) return done;
+            done.sorted = await this.sortGroups(doc, plan, groupIds);
+            if (!this.batch.stoppedAndReportedSince(started)) done.sorted += await this.sortChannels(doc, plan, groupIds);
+            return done;
+        }
+
+        async deleteGroups(groups) {
+            const tally = await this.batch.run(t('labelDeleteGroups'), groups, async group => {
+                await this.site.deleteGroup({ groupId: group.id, playlistId: this.playlistId }).catch(GroupRebuild.rethrowAbout(`«${group.title}»`));
+                return Step.CHANGED;
+            }, { summary: false });
+            return tally[Step.CHANGED];
+        }
+
+        /** a group of the new title that is still on the site would make two of one title: the rename waits for the next run */
+        async renameGroups(doc, targets) {
+            const shown = PlaylistPage.groupsIn(doc);
+            const tally = await this.batch.run(t('labelRename'), targets, async target => {
+                if (shown.some(group => group.id !== target.groupId && normalSpaces(group.title) === target.title)) {
+                    this.panel.log(t('rebuildRenameWaits', { from: target.renameFrom, to: target.title }), 'warn');
+                    return Step.SKIPPED;
+                }
+                await this.site.renameGroup({ groupId: target.groupId, title: target.title }).catch(GroupRebuild.rethrowAbout(`«${target.renameFrom}»`));
+                this.panel.log(`✎ «${target.renameFrom}» → «${target.title}»`, 'ok');
+                return Step.CHANGED;
+            }, { summary: false });
+            return tally[Step.CHANGED];
+        }
+
+        async sortGroups(doc, plan, groupIds) {
+            const tabIds = PlaylistPage.groupsIn(doc).map(group => group.id);
+            const order = RebuildPlan.groupOrderOf(tabIds, plan.pinned, [...groupIds.values()].filter(Boolean));
+            if (sameOrder(order, tabIds)) return 0;
+            const tally = await this.batch.run(t('labelOrder'), [order], async ids => {
+                await this.site.sortGroups({ playlistId: this.playlistId, groupIds: ids });
+                return Step.CHANGED;
+            }, { summary: false });
+            return tally[Step.CHANGED];
+        }
+
+        async sortChannels(doc, plan, groupIds) {
+            const rows = this.rowsWithCodesIn(doc);
+            const lists = plan.targets.map(target => GroupRebuild.channelSortIn(doc, rows, target, groupIds.get(target), plan)).filter(list => list && !list.sorted);
+            const tally = await this.batch.run(t('labelOrder'), lists, async list => {
+                await this.site.sortChannels({ playlistId: this.playlistId, order: list.payload }).catch(GroupRebuild.rethrowAbout(`«${list.title}»`));
+                return Step.CHANGED;
+            }, { summary: false });
+            return tally[Step.CHANGED];
+        }
+
+        static channelSortIn(doc, rows, target, groupId, plan) {
+            if (!groupId) return null;
+            const members = rows.filter(row => row.groupId === groupId);
+            const order = RebuildPlan.channelOrderOf(members, target, plan.places);
+            return {
+                title: target.title,
+                sorted: sameOrder(order, members.map(row => row.uuid)),
+                payload: RebuildPlan.orderPayload(PlaylistPage.childIdsIn(doc, groupId), order),
+            };
+        }
+
+        async readSite(failureKey) {
+            try {
+                const doc = await this.site.fetchPage(location.href);
+                await PlaylistPage.cacheTitlesWithoutFreezingIn(doc);
+                return doc;
+            } catch (error) {
+                this.panel.logFailure(t(failureKey, { error: describeError(error) }), error);
+                return null;
+            }
+        }
+
+        /** the page binds its drag and drop and its group links once at load, and the rebuilt lists come from the site */
+        reportEnd(summary, copies) {
+            const copiesLine = copies && Favourites.copiesLineOf(copies);
+            if (summary && copiesLine) this.panel.log(...copiesLine);
+            const last = summary ? [summary.text, summary.kind] : copiesLine;
+            if (last) this.panel.logAndToast(...last);
+            if (!summary) return;
+            summary.details.forEach(detail => this.panel.log(detail, 'warn'));
+            this.panel.log(t('rebuildReload'), 'warn');
+        }
+
+        static rethrowAbout(title) {
+            return error => {
+                throw Object.assign(error, { channelTitle: title });
+            };
         }
     }
 
@@ -3052,6 +3829,7 @@
             const parts = { page: this.page, decisions: this.decisions, editor: this.editor, batch: this.batch, view: this.view, panel: this.panel };
             this.reconciler = new Reconciler(parts);
             this.favourites = new Favourites(Object.assign({ site: this.site, reconciler: this.reconciler, playlistId: PLAYLIST_ID }, parts));
+            this.rebuild = new GroupRebuild(Object.assign({ site: this.site, reconciler: this.reconciler, favourites: this.favourites, playlistId: PLAYLIST_ID }, parts));
             this.transfer = new Transfer(Object.assign({ store: this.store, library: this.library }, parts));
             this.diagnostics = new Diagnostics(Object.assign({ site: this.site, window: pageWindow }, parts));
             this.init();
@@ -3090,6 +3868,9 @@
                     { action: 'apply', hint: 'applyHint', style: 'pri', run: this.userAction(event => this.reconciler.apply(event.shiftKey)) },
                     { action: 'sync', hint: 'syncHint', run: this.userAction(event => this.reconciler.synchronize(event.shiftKey)) },
                     { action: 'buildLibrary', hint: 'buildLibraryHint', run: this.userAction(event => this.collectLibrary(event.shiftKey)) },
+                ],
+                [
+                    { action: 'rebuild', hint: 'rebuildHint', run: this.userAction(event => this.handleRebuildButton(event)) },
                 ],
                 [
                     { action: 'exportAll', run: () => this.transfer.exportAll() },
@@ -3285,12 +4066,14 @@
             }
         }
 
+        handleRebuildButton(event) {
+            return Panel.runAloneWithSpinner($(event.currentTarget), () => (event.shiftKey ? this.rebuild.showPlan() : this.rebuild.run()));
+        }
+
         async reloadLists() {
             this.panel.status(t('refreshing'));
             try {
-                PlaylistPage.replaceListsFrom(await this.site.fetchPage(location.href));
-                this.view.showKnownNoChannelRows();
-                this.view.redecorateAll();
+                this.view.replaceListsAndRedecorate(await this.site.fetchPage(location.href));
                 this.panel.log(t('refreshed'));
             } catch (error) {
                 this.panel.logFailure(t('refreshFailed', { error: describeError(error) }), error);
