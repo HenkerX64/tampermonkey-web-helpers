@@ -2,7 +2,7 @@
 // @name         OttPlayer - TV Playlist Organizer
 // @name:ru      OttPlayer - Органайзер ТВ-плейлиста
 // @namespace    https://github.com/HenkerX64
-// @version      1.2
+// @version      1.2.1
 // @description  Organizes an OttPlayer playlist on its edit page: library icons and EPG, 18+ locks, group moves, and a memory of every decision, so the next playlist of the same provider takes one click.
 // @description:ru  Упорядочивает плейлист OttPlayer прямо на странице редактирования: иконки и EPG из библиотеки, замки 18+, перенос по группам и память решений — следующий плейлист того же провайдера в один клик.
 // @author       HenkerX64
@@ -122,7 +122,7 @@
     const STORAGE_KEY = 'ott-mapper-v1';
     const NO_CHANNEL = '1';
     const SHARED_TITLE = '';
-    const REQUEST_DELAY_MS = 160;
+    const REQUEST_DELAY_MS = 0;
     const PICKER_LIMIT = 60;
     const LOG_LIMIT = 300;
     const DECORATE_THROTTLE_MS = 300;
@@ -783,6 +783,11 @@
 
         static idsOf(byTitle, channel) {
             return byTitle.get(channel.title) || [];
+        }
+
+        /** the site's new-channel form creates nothing for a name with a colon, a semicolon or an ampersand; its edit form takes any title */
+        static titleTheSiteCreates(title) {
+            return normalSpaces(String(title).replace(/[^\p{L}\p{N} ]/gu, ' ')) || 'copy';
         }
 
         static hintOf(star) {
@@ -3050,7 +3055,7 @@
 
         /** the site binds a new channel by its title and never updates a copy's address: a copy is set to its original's, none included */
         mirrorOnto(copy, form) {
-            const wanted = { href: form.href, libchannel_id: form.libchannel_id || '', adult: Decisions.adultValue(form.adult === '1') };
+            const wanted = { ch_title: form.ch_title || copy.title, href: form.href, libchannel_id: form.libchannel_id || '', adult: Decisions.adultValue(form.adult === '1') };
             return this.writeAndShow(copy, wanted, {}, () => null);
         }
 
@@ -3100,6 +3105,7 @@
                 if (field === 'adult') return wanted.adult === '1' ? ' → 18+' : ` → ${t('changeUnlocked')}`;
                 if (field === 'href') return ` → ${t('addressUpdated')}`;
                 if (field === 'group_id') return ` → «${decision.group}»`;
+                if (field === 'ch_title') return ` → «${wanted.ch_title}»`;
                 return ` → ${field}`;
             }).join('');
         }
@@ -3329,11 +3335,13 @@
             if (this.batch.stoppedAndReportedSince(started)) return Step.SKIPPED;
             const members = this.page.channels(PlaylistPage.groupRowsIn(current, favourite.id));
             if (members.some(member => member.title === channel.title)) return this.showCopyAlreadyThere(channel, favourite, current);
-            await this.site.createChannel({ playlistId: this.playlistId, groupId: favourite.id, name: form.ch_title || channel.title, href: form.href });
+            const title = form.ch_title || channel.title;
+            const created = FavouriteCopies.titleTheSiteCreates(title);
+            await this.site.createChannel({ playlistId: this.playlistId, groupId: favourite.id, name: created, href: form.href });
             try {
-                const copy = this.newCopyOf(channel, favourite, new Set(members.map(member => member.uuid)), await this.site.fetchPage(location.href));
+                const copy = this.newCopyOf(channel, created, favourite, new Set(members.map(member => member.uuid)), await this.site.fetchPage(location.href));
                 this.panel.log(`★ ${channel.title} → «${favourite.title}»`, 'ok');
-                await this.reconciler.mirrorOnto(copy, form);
+                await this.reconciler.mirrorOnto(copy, Object.assign({}, form, { ch_title: title }));
                 return Step.CHANGED;
             } catch (unfinished) {
                 this.panel.log(t('copyUnfinished', { title: channel.title, group: favourite.title }), 'warn');
@@ -3358,14 +3366,14 @@
             }
         }
 
-        /** the site answers a new channel with a redirect and no id: the copy is the one new row of that title in the fetched page */
-        newCopyOf(channel, favourite, idsBefore, doc) {
-            const created = this.page.channels(PlaylistPage.groupRowsIn(doc, favourite.id))
-                .filter(candidate => !idsBefore.has(candidate.uuid) && candidate.title === channel.title);
-            if (created.length !== 1) {
-                throw Object.assign(new Error(t('copyUnclear', { group: favourite.title, count: created.length })), { channelTitle: channel.title });
+        /** the site answers a new channel with a redirect and no id: the copy is the one new row of the title the site was given */
+        newCopyOf(channel, created, favourite, idsBefore, doc) {
+            const rows = this.page.channels(PlaylistPage.groupRowsIn(doc, favourite.id))
+                .filter(candidate => !idsBefore.has(candidate.uuid) && candidate.title === created);
+            if (rows.length !== 1) {
+                throw Object.assign(new Error(t('copyUnclear', { group: favourite.title, count: rows.length })), { channelTitle: channel.title });
             }
-            const { uuid, title, url } = created[0];
+            const { uuid, title, url } = rows[0];
             return { uuid, title, url };
         }
 
