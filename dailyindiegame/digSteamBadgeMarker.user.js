@@ -1,8 +1,10 @@
 // ==UserScript==
 // @name         DIG Steam Badge Marker
 // @namespace    https://github.com/HenkerX64
-// @version      1.2
+// @version      1.2.1
 // @description  Marks DailyIndieGame titles that have Steam trading cards, using cached data from steam-badges-db.
+// @tag          games
+// @tag          steam
 // @author       HenkerX64
 // @homepage     https://github.com/HenkerX64/tampermonkey-web-helpers
 // @supportURL   https://github.com/HenkerX64/tampermonkey-web-helpers/issues
@@ -17,6 +19,7 @@
 
 /** @var {Function} GM_addStyle */
 /** @var {{xmlHttpRequest: Function}} GM */
+/** @var {{script: {name: string, version: string}}} GM_info */
 
 (function () {
     'use strict';
@@ -25,6 +28,7 @@
     const CACHE_KEY = 'steam_badges_db';
     const CACHE_TIME = 1000 * 60 * 60 * 6; // 6 Stunden Cache
 
+    const ENABLE_CONSOLE_REPORT = true;
     const ENABLE_AUTO_BUY = document.location.pathname.startsWith('/site_gamelisting_');
 
     class SteamBadgeMarker {
@@ -87,6 +91,7 @@
 
         markSteamGames() {
             const images = document.querySelectorAll("img[src^='dig3-images-steam/']");
+            let marked = 0;
             images.forEach(img => {
                 const match = img.src.match(/dig3-images-steam\/(\d+)\.jpg/);
                 if (!match) return;
@@ -94,12 +99,15 @@
                 const appId = match[1];
                 if (this.badgesData[appId]) {
                     this.decorate(img);
+                    marked++;
                 }
             });
+            this.reportMarkedCount('Steam game images', marked, images.length);
         }
 
         markSteamGameLinks() {
-            const links = document.querySelectorAll("a[href^='https://store.steampowered.com/app/']");
+            const links = document.querySelectorAll("a[href*='//store.steampowered.com/app/']");
+            let marked = 0;
             links.forEach(link => {
                 const match = link.href.match(/steampowered\.com\/app\/(\d+)/);
                 if (!match) return;
@@ -107,8 +115,21 @@
                 const appId = match[1];
                 if (this.badgesData[appId]) {
                     this.decorate(link);
+                    marked++;
                 }
             });
+            this.reportMarkedCount('Steam store links', marked, links.length);
+        }
+
+        reportMarkedCount(subject, marked, checked) {
+            if (!ENABLE_CONSOLE_REPORT) return;
+            const [nameColor, countColor] = checked === 0 ? ['#666', '#999'] : ['#eb0f9b', '#FD5E0F'];
+            console.log(
+                `%c${GM_info.script.name} ${GM_info.script.version}%c${subject}%c${marked} of ${checked} marked`,
+                `background:${nameColor};color:#fff;font-weight:bold;padding:2px 6px;border-radius:4px 0 0 4px`,
+                'background:#333;color:#ddd;padding:2px 6px',
+                `background:${countColor};color:#000;font-weight:bold;padding:2px 6px;border-radius:0 4px 4px 0`
+            );
         }
 
         decorate(img) {
@@ -125,7 +146,7 @@
                   animation: steam-badge-game 1.5s ease-in-out infinite;
                 }
                 @keyframes steam-badge-game {
-                  0%   { transform: scale(1);    opacity: 1;   border-color: dark-red; }
+                  0%   { transform: scale(1);    opacity: 1;   border-color: darkred; }
                   50%  { transform: scale(1.02); opacity: .75; border-color: orange; }
                   100% { transform: scale(1);    opacity: 1;   border-color: red; }
                 }
